@@ -2,6 +2,7 @@ import { Phone, PhoneOff, Video } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { CallSignalType, CallType, type Profile } from "../backend";
 import { useActor } from "../hooks/useActor";
+import { playRingTone } from "../hooks/useSound";
 
 interface IncomingCallInfo {
   fromProfile: Profile;
@@ -26,6 +27,29 @@ export function IncomingCallOverlay({
   onAccept,
   onDecline,
 }: IncomingCallOverlayProps) {
+  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (incomingCall) {
+      // Play ring immediately then every 2s
+      playRingTone();
+      ringIntervalRef.current = setInterval(() => {
+        playRingTone();
+      }, 2000);
+    } else {
+      if (ringIntervalRef.current) {
+        clearInterval(ringIntervalRef.current);
+        ringIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (ringIntervalRef.current) {
+        clearInterval(ringIntervalRef.current);
+        ringIntervalRef.current = null;
+      }
+    };
+  }, [incomingCall]);
+
   if (!incomingCall) return null;
   const { fromProfile, callType } = incomingCall;
 

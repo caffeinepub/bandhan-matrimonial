@@ -1,34 +1,26 @@
-# Bandhan Matrimonial - Version 6
+# Bandhan Matrimonial
 
 ## Current State
-Version 5 is live with: Internet Identity auth, WebRTC voice/video calls, extended profile (interests, hobbies, movies, songs, education, mood, 7 media URL slots), chat with typing indicators & read receipts, stories with comments, swipe browse, match requests, mutual matches, admin dashboard, incoming call overlay, call history.
-
-Media is added via pasting URLs (not direct upload). Story images are also added via URL.
+Chat messages are sent/received via backend. Reactions, edits, and deletes are currently stored only in local React state (not persisted). The Message type has id, fromUserId, toUserId, text, timestamp, read fields.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Blob storage media upload: replace URL paste inputs with file picker upload buttons for profile photo and all 7 media gallery slots
-- Story upload from device: replace URL prompt with file upload for story creation
-- Story likes: users can like/unlike stories; like count shown
-- Story comment replies: users can reply to existing comments on a story
-- Phone/mobile number field on profile (optional, stored in backend)
+- `reactToMessage(messageId, emoji)` backend function - stores a reaction emoji on a message
+- `editMessage(messageId, newText)` backend function - updates message text (only sender can edit)
+- `deleteMessage(messageId)` backend function - marks message as deleted (only sender can delete)
+- `reaction`, `editedText`, `deleted` optional fields on Message type
 
 ### Modify
-- Profile setup Step 0: photo upload uses StorageClient (file → blob URL)
-- Profile setup Step 5 (Media): file pickers instead of URL text inputs
-- ChatPage add story: file upload from device instead of URL prompt
-- Story viewer modal: add like button + reply to comment
-- Profile data model: add `phone` field
+- `getMessages` to filter out deleted messages OR include deleted flag
+- `ConversationPage.tsx` to call backend for react/edit/delete instead of local state only, and load reactions/edits/deleted status from returned messages
 
 ### Remove
-- URL paste inputs for profile photo, media gallery, and story creation
+- Nothing removed; local state is kept as fallback for optimistic updates
 
 ## Implementation Plan
-1. Update backend: add `phone` field to Profile, add `likeStory`, `unlikeStory`, `getStoryLikes` (returns likes count and whether caller liked), add `replyToStoryComment` (reply with parentCommentId), `StoryCommentReply` type
-2. Select blob-storage component
-3. Frontend: update ProfileSetupPage to use StorageClient for photo and media uploads
-4. Frontend: update ChatPage story creation to use file upload via StorageClient
-5. Frontend: update StoryViewerModal to show likes + like/unlike button + comment replies
-6. Frontend: add phone field to ProfileSetupPage step 0
-7. Frontend: add phone field to MyProfilePage edit form
+1. Add `reaction: ?Text`, `isDeleted: Bool` fields to Message type in backend
+2. Add `reactToMessage`, `editMessage`, `deleteMessage` backend functions
+3. Update `getMessages` to return updated messages (with reaction/isDeleted fields)
+4. Update `backend.d.ts` with new function signatures and updated Message type
+5. Update `ConversationPage.tsx` to call backend functions and read persisted state from messages

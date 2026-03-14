@@ -1,18 +1,31 @@
 import { Check, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   useAcceptRequest,
   useDeclineRequest,
   useMatchRequests,
 } from "../hooks/useQueries";
+import { playMatchReceivedSound } from "../hooks/useSound";
 
 export default function RequestsPage() {
   const { data: requests = [], isLoading } = useMatchRequests();
   const accept = useAcceptRequest();
   const decline = useDeclineRequest();
+  const prevCountRef = useRef<number | null>(null);
 
   const pending = requests.filter(([, s]) => s === "pending");
   const others = requests.filter(([, s]) => s !== "pending");
+
+  // Play sound when new pending requests arrive
+  useEffect(() => {
+    if (isLoading) return;
+    const count = pending.length;
+    if (prevCountRef.current !== null && count > prevCountRef.current) {
+      playMatchReceivedSound();
+    }
+    prevCountRef.current = count;
+  }, [pending.length, isLoading]);
 
   return (
     <div className="min-h-screen pt-14 pb-4" style={{ background: "#0a0010" }}>
@@ -49,7 +62,7 @@ export default function RequestsPage() {
             style={{ background: "oklch(0.13 0.05 300)" }}
           >
             <div
-              className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center"
+              className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center relative"
               style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
             >
               {profile.photoUrl ? (
@@ -65,9 +78,11 @@ export default function RequestsPage() {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white font-semibold truncate">
-                {profile.name}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-white font-semibold truncate">
+                  {profile.name}
+                </p>
+              </div>
               <p className="text-white/50 text-sm">
                 {Number(profile.age)} • {profile.location}
               </p>

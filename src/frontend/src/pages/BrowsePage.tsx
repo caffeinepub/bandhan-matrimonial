@@ -8,9 +8,19 @@ import {
   useCallerProfile,
   useSendMatchRequest,
 } from "../hooks/useQueries";
+import { playMatchSentSound } from "../hooks/useSound";
 
 interface Props {
   onViewProfile: (p: Profile) => void;
+}
+
+// Deterministically marks first ~30% of profiles as premium based on name hash
+function isPremiumProfile(p: Profile): boolean {
+  let hash = 0;
+  for (let i = 0; i < p.name.length; i++) {
+    hash = (hash * 31 + p.name.charCodeAt(i)) & 0xffff;
+  }
+  return hash % 3 === 0;
 }
 
 export default function BrowsePage({ onViewProfile }: Props) {
@@ -42,6 +52,7 @@ export default function BrowsePage({ onViewProfile }: Props) {
 
   const handleLike = async (p: Profile) => {
     setLiked((prev) => new Set([...prev, p.userId.toString()]));
+    playMatchSentSound();
     try {
       await sendRequest.mutateAsync(p.userId);
       toast.success("Match request sent! 💕");
@@ -153,6 +164,19 @@ export default function BrowsePage({ onViewProfile }: Props) {
                   "linear-gradient(to top,rgba(10,0,16,0.95) 0%,transparent 60%)",
               }}
             />
+            {/* Premium badge */}
+            {isPremiumProfile(currentProfile) && (
+              <div
+                className="absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold"
+                style={{
+                  background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                  boxShadow: "0 2px 10px rgba(245,158,11,0.5)",
+                }}
+              >
+                <span>👑</span>
+                <span className="text-white">Premium</span>
+              </div>
+            )}
             <div className="absolute bottom-0 left-0 right-0 p-5">
               <h2 className="text-2xl font-bold text-white">
                 {currentProfile.name}, {Number(currentProfile.age)}
@@ -263,6 +287,18 @@ export default function BrowsePage({ onViewProfile }: Props) {
                           "linear-gradient(to top,rgba(10,0,16,0.8) 0%,transparent 50%)",
                       }}
                     />
+                    {isPremiumProfile(p) && (
+                      <div
+                        className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                        style={{
+                          background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                          boxShadow: "0 1px 6px rgba(245,158,11,0.6)",
+                          fontSize: "10px",
+                        }}
+                      >
+                        👑
+                      </div>
+                    )}
                     <div className="absolute bottom-2 left-2">
                       <p className="text-white text-xs font-semibold truncate">
                         {p.name}

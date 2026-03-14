@@ -11,18 +11,29 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   Camera,
+  Crown,
   Edit3,
+  Eye,
+  EyeOff,
   Loader2,
+  Lock,
   LogOut,
   PhoneCall,
   Save,
+  Shield,
   Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Gender } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useCallerProfile, useCreateProfile } from "../hooks/useQueries";
+import {
+  useCallerProfile,
+  useCreateProfile,
+  usePrivacyVisibility,
+  useSetPrivacyVisibility,
+} from "../hooks/useQueries";
+import type { PrivacyVisibility } from "../hooks/useQueries";
 import { useStorageUpload } from "../hooks/useStorageUpload";
 
 const INTERESTS_LIST = [
@@ -60,6 +71,35 @@ const HOBBIES_LIST = [
   "Blogging",
 ];
 
+// Map between UI option values and backend PrivacyVisibility values
+const UI_TO_BACKEND: Record<string, PrivacyVisibility> = {
+  everyone: "everyone",
+  matches: "matchesOnly",
+  hidden: "hidden",
+};
+const BACKEND_TO_UI: Record<string, string> = {
+  everyone: "everyone",
+  matchesOnly: "matches",
+  hidden: "hidden",
+};
+
+type VisibilityOption = "everyone" | "matches" | "hidden";
+
+function loadLocalPrivacySettings() {
+  try {
+    return {
+      showLastActive:
+        localStorage.getItem("bandhan_show_last_active") !== "false",
+      isPremium: localStorage.getItem("bandhan_is_premium") === "true",
+    };
+  } catch {
+    return {
+      showLastActive: true,
+      isPremium: false,
+    };
+  }
+}
+
 interface MyProfilePageProps {
   onCallHistory?: () => void;
 }
@@ -69,8 +109,54 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
   const { clear: logout } = useInternetIdentity();
   const { uploadFile, uploading } = useStorageUpload();
   const [editing, setEditing] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const photoFileRef = useRef<HTMLInputElement>(null);
   const mediaFileRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Privacy visibility from backend
+  const { data: backendVisibility } = usePrivacyVisibility();
+  const setPrivacyVisibilityMutation = useSetPrivacyVisibility();
+
+  // Local UI visibility state — synced from backend once loaded
+  const [visibility, setVisibility] = useState<VisibilityOption>("everyone");
+
+  // Sync backend visibility to local state once loaded
+  useEffect(() => {
+    if (backendVisibility) {
+      const uiVal = BACKEND_TO_UI[backendVisibility] as
+        | VisibilityOption
+        | undefined;
+      if (uiVal) setVisibility(uiVal);
+    }
+  }, [backendVisibility]);
+
+  // Non-visibility privacy settings stay in localStorage
+  const localSettings = loadLocalPrivacySettings();
+  const [showLastActive, setShowLastActive] = useState(
+    localSettings.showLastActive,
+  );
+  const [isPremium, setIsPremium] = useState(localSettings.isPremium);
+
+  const saveLocalPrivacy = (sla: boolean, prem: boolean) => {
+    try {
+      localStorage.setItem("bandhan_show_last_active", String(sla));
+      localStorage.setItem("bandhan_is_premium", String(prem));
+    } catch {}
+  };
+
+  const handleVisibilityChange = async (
+    val: VisibilityOption,
+    label: string,
+  ) => {
+    setVisibility(val);
+    const backendVal = UI_TO_BACKEND[val];
+    try {
+      await setPrivacyVisibilityMutation.mutateAsync(backendVal);
+      toast.success(`Visibility: ${label}`);
+    } catch {
+      toast.error("Failed to save visibility");
+    }
+  };
 
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -284,6 +370,19 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
             background: "linear-gradient(to top,#0a0010 20%,transparent)",
           }}
         />
+        {/* Premium badge on hero */}
+        {isPremium && (
+          <div
+            className="absolute top-14 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+            style={{
+              background: "linear-gradient(135deg,#f59e0b,#d97706)",
+              boxShadow: "0 2px 12px rgba(245,158,11,0.6)",
+            }}
+          >
+            <Crown className="w-3.5 h-3.5 text-white" />
+            <span className="text-white text-xs font-bold">Premium Member</span>
+          </div>
+        )}
         <div className="absolute top-12 right-4 flex gap-2">
           {editing && (
             <button
@@ -361,6 +460,202 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
       </div>
 
       <div className="px-5 space-y-5 mt-4">
+        {/* Privacy & Premium settings toggle */}
+        <button
+          type="button"
+          onClick={() => setShowPrivacy((s) => !s)}
+          data-ocid="myprofile.toggle"
+          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-white"
+          style={{
+            background: "oklch(0.13 0.05 300)",
+            border: showPrivacy
+              ? "1px solid oklch(0.4 0.15 300)"
+              : "1px solid transparent",
+          }}
+        >
+          <div className="flex items-center gap-2.5">
+            <Shield
+              className="w-4 h-4"
+              style={{ color: "oklch(0.7 0.2 280)" }}
+            />
+            <span className="text-sm font-semibold">
+              Privacy &amp; Membership
+            </span>
+          </div>
+          <span className="text-white/40 text-xs">
+            {showPrivacy ? "▲" : "▼"}
+          </span>
+        </button>
+
+        {showPrivacy && (
+          <div
+            className="rounded-2xl p-4 space-y-5"
+            style={{ background: "oklch(0.12 0.05 300)" }}
+          >
+            {/* Profile Visibility */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Eye className="w-4 h-4 text-white/50" />
+                <p className="text-white/70 text-sm font-semibold">
+                  Profile Visibility
+                </p>
+                {setPrivacyVisibilityMutation.isPending && (
+                  <Loader2 className="w-3 h-3 text-white/40 animate-spin" />
+                )}
+              </div>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { val: "everyone", label: "Everyone", icon: "🌍" },
+                    { val: "matches", label: "Matches Only", icon: "💞" },
+                    { val: "hidden", label: "Hidden", icon: "🚫" },
+                  ] as const
+                ).map(({ val, label, icon }) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => handleVisibilityChange(val, label)}
+                    data-ocid="myprofile.toggle"
+                    disabled={setPrivacyVisibilityMutation.isPending}
+                    className="flex-1 py-2.5 rounded-xl flex flex-col items-center gap-1 text-xs font-medium text-white transition-all"
+                    style={
+                      visibility === val
+                        ? {
+                            background:
+                              "linear-gradient(135deg,#7c3aed,#2563eb)",
+                            boxShadow: "0 2px 12px rgba(124,58,237,0.4)",
+                          }
+                        : { background: "oklch(0.18 0.05 300)" }
+                    }
+                  >
+                    <span className="text-base">{icon}</span>
+                    <span className="leading-tight text-center">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Show Last Active */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-white/50" />
+                <div>
+                  <p className="text-white/80 text-sm">Show Last Active</p>
+                  <p className="text-white/40 text-xs">
+                    Let matches see when you were last online
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !showLastActive;
+                  setShowLastActive(next);
+                  saveLocalPrivacy(next, isPremium);
+                }}
+                data-ocid="myprofile.toggle"
+                className="w-12 h-6 rounded-full transition-all relative"
+                style={{
+                  background: showLastActive
+                    ? "linear-gradient(135deg,#e11d48,#7c3aed)"
+                    : "oklch(0.25 0.05 300)",
+                }}
+              >
+                <div
+                  className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
+                  style={{ left: showLastActive ? "calc(100% - 22px)" : "2px" }}
+                />
+              </button>
+            </div>
+
+            {/* Hide seen status */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-4 h-4 text-white/50" />
+                <div>
+                  <p className="text-white/80 text-sm">Hide Read Receipts</p>
+                  <p className="text-white/40 text-xs">
+                    Don't show when you've read messages
+                  </p>
+                </div>
+              </div>
+              <div
+                className="w-12 h-6 rounded-full relative"
+                style={{ background: "oklch(0.25 0.05 300)" }}
+              >
+                <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white/40" />
+              </div>
+            </div>
+
+            {/* Premium membership */}
+            <div
+              className="rounded-xl p-3"
+              style={{
+                background: isPremium
+                  ? "linear-gradient(135deg,oklch(0.25 0.12 60),oklch(0.2 0.1 50))"
+                  : "oklch(0.15 0.04 300)",
+                border: isPremium
+                  ? "1px solid oklch(0.5 0.18 60 / 0.5)"
+                  : "1px solid oklch(0.25 0.05 300)",
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Crown
+                    className="w-5 h-5"
+                    style={{
+                      color: isPremium
+                        ? "oklch(0.8 0.2 60)"
+                        : "oklch(0.5 0.1 60)",
+                    }}
+                  />
+                  <div>
+                    <p
+                      className="text-sm font-bold"
+                      style={{
+                        color: isPremium ? "oklch(0.85 0.2 60)" : "white",
+                      }}
+                    >
+                      {isPremium ? "Premium Member" : "Upgrade to Premium"}
+                    </p>
+                    <p className="text-white/40 text-xs">
+                      {isPremium
+                        ? "Crown badge visible on your profile"
+                        : "Show a premium badge on your profile"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isPremium;
+                    setIsPremium(next);
+                    saveLocalPrivacy(showLastActive, next);
+                    toast.success(
+                      next ? "👑 Premium activated!" : "Premium deactivated",
+                    );
+                  }}
+                  data-ocid="myprofile.toggle"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold"
+                  style={
+                    isPremium
+                      ? {
+                          background: "oklch(0.4 0.15 60)",
+                          color: "white",
+                        }
+                      : {
+                          background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                          color: "white",
+                        }
+                  }
+                >
+                  {isPremium ? "Active" : "Enable"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!editing ? (
           <>
             {p?.bio && <Section title="About">{p.bio}</Section>}

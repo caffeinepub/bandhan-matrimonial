@@ -9,7 +9,7 @@ import Iter "mo:core/Iter";
 import Time "mo:core/Time";
 import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
-import Migration "migration";
+
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
@@ -17,7 +17,7 @@ import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
 
 
-(with migration = Migration.run)
+
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -29,6 +29,13 @@ actor {
     #other;
   };
 
+  type PrivacyVisibility = {
+    #everyone;
+    #matchesOnly;
+    #hidden;
+  };
+
+  // Core stored message type -- unchanged for stable compatibility
   type Message = {
     id : Nat;
     fromUserId : Principal;
@@ -36,6 +43,18 @@ actor {
     text : Text;
     timestamp : Int;
     read : Bool;
+  };
+
+  // Enriched message type returned to clients (includes reaction + isDeleted)
+  type MessageWithMeta = {
+    id : Nat;
+    fromUserId : Principal;
+    toUserId : Principal;
+    text : Text;
+    timestamp : Int;
+    read : Bool;
+    reaction : ?Text;
+    isDeleted : Bool;
   };
 
   type Profile = {
@@ -132,9 +151,14 @@ actor {
   let profiles = Map.empty<Principal, Profile>();
   let matches = Map.empty<Principal, Set.Set<Principal>>();
   let matchRequests = Map.empty<Principal, Map.Map<Principal, { #pending; #accepted; #declined }>>();
+  let privacySettings = Map.empty<Principal, PrivacyVisibility>();
 
   let messages = Map.empty<Principal, List.List<Message>>();
   var nextMessageId = 1;
+
+  // Separate stable stores for reactions and deletes -- avoids Message type migration
+  let messageReactions = Map.empty<Nat, Text>(); // messageId -> emoji
+  let deletedMessageIds = Set.empty<Nat>();      // set of deleted messageIds
 
   let stories = Map.empty<Nat, Story>();
   var nextStoryId = 1;
@@ -150,6 +174,31 @@ actor {
   let typingStatuses = List.empty<TypingStatus>();
 
   let callHistories = Map.empty<Principal, List.List<CallHistory>>();
+
+  // Privacy helpers
+  func isProfileVisible(profileUserId : Principal, caller : Principal) : Bool {
+    let visibility = privacySettings.get(profileUserId);
+    switch (visibility) {
+      case (null) { true };
+      case (?#everyone) { true };
+      case (?#hidden) { false };
+      case (?#matchesOnly) { areMutualMatches(caller, profileUserId) };
+    };
+  };
+
+  public shared ({ caller }) func setPrivacyVisibility(visibility : PrivacyVisibility) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can set privacy settings");
+    };
+    privacySettings.add(caller, visibility);
+  };
+
+  public query ({ caller }) func getPrivacyVisibility() : async PrivacyVisibility {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+    privacySettings.get(caller).get(#everyone);
+  };
 
   public shared ({ caller }) func createOrUpdateProfile(
     name : Text,
@@ -227,7 +276,9 @@ actor {
     };
 
     profiles.values().toArray().filter(
-      func(profile) { profile.userId != caller }
+      func(profile) {
+        profile.userId != caller and isProfileVisible(profile.userId, caller)
+      }
     );
   };
 
@@ -240,6 +291,9 @@ actor {
 
     profiles.values().toArray().filter(
       func(profile) {
+        if (profile.userId == caller or not isProfileVisible(profile.userId, caller)) {
+          return false;
+        };
         let lowerName = profile.name.toLower();
         let lowerLocation = profile.location.toLower();
         let lowerReligion = profile.religion.toLower();
@@ -426,7 +480,8 @@ actor {
     nextMessageId += 1;
   };
 
-  public query ({ caller }) func getMessages(withUserId : Principal) : async [Message] {
+  // Returns messages enriched with reaction and isDeleted, filtering out deleted ones
+  public query ({ caller }) func getMessages(withUserId : Principal) : async [MessageWithMeta] {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can view messages");
     };
@@ -436,9 +491,99 @@ actor {
     };
 
     let userMessages = messages.get(caller).get(List.empty<Message>());
-    userMessages.toArray().filter(
-      func(msg) { msg.toUserId == withUserId or msg.fromUserId == withUserId }
+    let filtered = userMessages.toArray().filter(
+      func(msg) {
+        (msg.toUserId == withUserId or msg.fromUserId == withUserId) and
+        not deletedMessageIds.contains(msg.id)
+      }
     );
+    filtered.map(
+      func(msg) : MessageWithMeta {
+        {
+          id = msg.id;
+          fromUserId = msg.fromUserId;
+          toUserId = msg.toUserId;
+          text = msg.text;
+          timestamp = msg.timestamp;
+          read = msg.read;
+          reaction = messageReactions.get(msg.id);
+          isDeleted = false;
+        }
+      }
+    );
+  };
+
+  // React to a message -- persisted in separate map
+  public shared ({ caller }) func reactToMessage(messageId : Nat, emoji : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+    messageReactions.add(messageId, emoji);
+  };
+
+  // Edit a message -- only sender can edit; updates stored text in place
+  public shared ({ caller }) func editMessage(messageId : Nat, newText : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+
+    let userMessages = messages.get(caller).get(List.empty<Message>());
+    var found = false;
+    var otherUserId = caller;
+
+    let updatedMessages = userMessages.map<Message, Message>(
+      func(msg) {
+        if (msg.id == messageId) {
+          if (msg.fromUserId != caller) {
+            Runtime.trap("Unauthorized: You can only edit your own messages");
+          };
+          found := true;
+          otherUserId := msg.toUserId;
+          { msg with text = newText };
+        } else { msg };
+      }
+    );
+
+    if (not found) {
+      Runtime.trap("Message not found");
+    };
+
+    messages.add(caller, updatedMessages);
+
+    // Update in recipient's message list
+    if (otherUserId != caller) {
+      let otherMessages = messages.get(otherUserId).get(List.empty<Message>());
+      let updatedOtherMessages = otherMessages.map<Message, Message>(
+        func(msg) {
+          if (msg.id == messageId) {
+            { msg with text = newText };
+          } else { msg };
+        }
+      );
+      messages.add(otherUserId, updatedOtherMessages);
+    };
+  };
+
+  // Delete a message -- only sender; persisted in separate set
+  public shared ({ caller }) func deleteMessage(messageId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+
+    // Verify the message exists and belongs to caller
+    let userMessages = messages.get(caller).get(List.empty<Message>());
+    let found = userMessages.toArray().find(
+      func(msg) { msg.id == messageId and msg.fromUserId == caller }
+    );
+
+    switch (found) {
+      case (null) {
+        Runtime.trap("Message not found or not authorized to delete");
+      };
+      case (?_) {
+        deletedMessageIds.add(messageId);
+      };
+    };
   };
 
   public shared ({ caller }) func addStory(imageUrl : Text, caption : Text) : async () {
@@ -672,11 +817,9 @@ actor {
     let updatedMessages = userMessages.map<Message, Message>(
       func(msg) {
         if (msg.id == messageId) {
-          // Verify that the caller is the recipient of the message
           if (msg.toUserId != caller) {
             Runtime.trap("Unauthorized: You can only mark messages sent to you as read");
           };
-          // Verify mutual match relationship
           if (not areMutualMatches(caller, msg.fromUserId)) {
             Runtime.trap("Unauthorized: You can only mark messages from matched users as read");
           };

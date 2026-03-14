@@ -67,6 +67,8 @@ export interface Message {
     toUserId: Principal;
     fromUserId: Principal;
     timestamp: bigint;
+    reaction?: string;
+    isDeleted: boolean;
 }
 export interface CallHistory {
     status: CallStatus;
@@ -106,6 +108,11 @@ export enum Variant_pending_accepted_declined {
     accepted = "accepted",
     declined = "declined"
 }
+export enum PrivacyVisibility {
+    everyone = "everyone",
+    matchesOnly = "matchesOnly",
+    hidden = "hidden"
+}
 export interface backendInterface {
     acceptMatchRequest(fromUserId: Principal): Promise<void>;
     addStory(imageUrl: string, caption: string): Promise<void>;
@@ -115,6 +122,8 @@ export interface backendInterface {
     consumeCallSignals(fromUserId: Principal): Promise<Array<CallSignal>>;
     createOrUpdateProfile(name: string, age: bigint, gender: Gender, religion: string, location: string, bio: string, photoUrl: string | null, occupation: string, height: string, motherTongue: string, maritalStatus: string, interests: Array<string>, hobbies: Array<string>, education: string, favoriteMovies: Array<string>, favoriteSongs: Array<string>, thoughts: string, mood: string, mediaUrls: Array<string>, aboutMe: string, phone: string | null): Promise<void>;
     declineMatchRequest(fromUserId: Principal): Promise<void>;
+    deleteMessage(messageId: bigint): Promise<void>;
+    editMessage(messageId: bigint, newText: string): Promise<void>;
     getAllProfiles(): Promise<Array<Profile>>;
     getAllWithRequestedCount(): Promise<Array<[Profile, bigint]>>;
     getCallHistory(): Promise<Array<[CallHistory, Profile]>>;
@@ -123,6 +132,7 @@ export interface backendInterface {
     getMatchRequests(): Promise<Array<[Profile, Variant_pending_accepted_declined]>>;
     getMessages(withUserId: Principal): Promise<Array<Message>>;
     getMutualMatches(): Promise<Array<Profile>>;
+    getPrivacyVisibility(): Promise<PrivacyVisibility>;
     getStories(): Promise<Array<Story>>;
     getStoryComments(storyId: bigint): Promise<Array<StoryComment>>;
     getTypingStatus(fromUserId: Principal): Promise<boolean>;
@@ -133,10 +143,12 @@ export interface backendInterface {
     likeStory(storyId: bigint): Promise<void>;
     logCall(withUserId: Principal, callType: CallType, durationSeconds: bigint, status: CallStatus): Promise<void>;
     markMessageRead(messageId: bigint): Promise<void>;
+    reactToMessage(messageId: bigint, emoji: string): Promise<void>;
     replyToStoryComment(storyId: bigint, parentCommentId: bigint, text: string): Promise<void>;
     searchProfiles(term: string): Promise<Array<Profile>>;
     sendMatchRequest(toUserId: Principal): Promise<void>;
     sendMessage(toUserId: Principal, text: string): Promise<void>;
+    setPrivacyVisibility(visibility: PrivacyVisibility): Promise<void>;
     setTyping(toUserId: Principal, isTyping: boolean): Promise<void>;
     storeCallSignal(toUserId: Principal, signalType: CallSignalType, data: string, callType: CallType): Promise<void>;
     unlikeStory(storyId: bigint): Promise<void>;

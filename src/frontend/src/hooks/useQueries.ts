@@ -13,6 +13,9 @@ import type {
 } from "../backend";
 import { useActor } from "./useActor";
 
+// PrivacyVisibility type — matches backend enum values
+export type PrivacyVisibility = "everyone" | "matchesOnly" | "hidden";
+
 export function useCallerProfile() {
   const { actor, isFetching } = useActor();
   return useQuery<Profile | null>({
@@ -492,6 +495,89 @@ export function useLogCall() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["callHistory"] });
+    },
+  });
+}
+
+export function usePrivacyVisibility() {
+  const { actor, isFetching } = useActor();
+  return useQuery<PrivacyVisibility>({
+    queryKey: ["privacyVisibility"],
+    queryFn: async () => {
+      if (!actor) return "everyone" as PrivacyVisibility;
+      try {
+        return (await (
+          actor as any
+        ).getPrivacyVisibility()) as PrivacyVisibility;
+      } catch {
+        return "everyone" as PrivacyVisibility;
+      }
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function useSetPrivacyVisibility() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (visibility: PrivacyVisibility) => {
+      if (!actor) throw new Error("Not authenticated");
+      await (actor as any).setPrivacyVisibility(visibility);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["privacyVisibility"] });
+    },
+  });
+}
+
+// --- Chat: react, edit, delete ---
+
+export function useReactToMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      emoji,
+    }: { messageId: bigint; emoji: string }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await (actor as any).reactToMessage(messageId, emoji);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+    },
+  });
+}
+
+export function useEditMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      newText,
+    }: { messageId: bigint; newText: string }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await (actor as any).editMessage(messageId, newText);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+    },
+  });
+}
+
+export function useDeleteMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (messageId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await (actor as any).deleteMessage(messageId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
     },
   });
 }
