@@ -8,7 +8,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { CallSignalType, CallStatus, CallType, type Profile } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { useLogCall, useStoreCallSignal } from "../hooks/useQueries";
@@ -211,7 +210,6 @@ export default function VideoCallPage({
         }, 1500);
       } catch {
         if (!cancelled) {
-          toast.error("Camera/microphone permission denied");
           onEnd();
         }
       }
@@ -265,9 +263,7 @@ export default function VideoCallPage({
           localVideoRef.current.srcObject = localStreamRef.current;
         }
       }
-    } catch {
-      toast.error("Could not switch camera");
-    }
+    } catch {}
   };
 
   const shareScreen = async () => {
@@ -284,9 +280,7 @@ export default function VideoCallPage({
         const camTrack = localStreamRef.current?.getVideoTracks()[0];
         if (camTrack) sender?.replaceTrack(camTrack);
       };
-    } catch {
-      toast.error("Screen share cancelled");
-    }
+    } catch {}
   };
 
   return (

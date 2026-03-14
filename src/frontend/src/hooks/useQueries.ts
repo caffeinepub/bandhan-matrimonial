@@ -581,3 +581,65 @@ export function useDeleteMessage() {
     },
   });
 }
+
+export function usePremiumStatus() {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["premiumStatus"],
+    queryFn: async () => {
+      if (!actor) return false;
+      try {
+        return (await (actor as any).getPremiumStatus()) as boolean;
+      } catch {
+        return false;
+      }
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function useSetPremiumStatus() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (value: boolean) => {
+      if (!actor) throw new Error("Not authenticated");
+      await (actor as any).setPremiumStatus(value);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["premiumStatus"] });
+    },
+  });
+}
+
+export function useShowLastActive() {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["showLastActive"],
+    queryFn: async () => {
+      if (!actor) return true;
+      try {
+        return (await (actor as any).getShowLastActive()) as boolean;
+      } catch {
+        return true;
+      }
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function useSetShowLastActive() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (value: boolean) => {
+      if (!actor) throw new Error("Not authenticated");
+      await (actor as any).setShowLastActive(value);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["showLastActive"] });
+    },
+  });
+}

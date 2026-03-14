@@ -9,7 +9,6 @@ import {
   Video,
 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { Profile } from "../backend";
 import { useSendMatchRequest } from "../hooks/useQueries";
 
@@ -41,10 +40,7 @@ export default function ViewProfilePage({
     try {
       await sendRequest.mutateAsync(profile.userId);
       setLiked(true);
-      toast.success("Match request sent! 💕");
-    } catch {
-      toast.error("Failed to send request");
-    }
+    } catch {}
   };
 
   return (

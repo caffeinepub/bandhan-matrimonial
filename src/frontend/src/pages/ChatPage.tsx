@@ -1,7 +1,6 @@
 import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
-import type { Profile, Story } from "../backend";
+import type { Profile } from "../backend";
 import StoryViewerModal from "../components/StoryViewerModal";
 import { useAddStory, useMutualMatches, useStories } from "../hooks/useQueries";
 import { useStorageUpload } from "../hooks/useStorageUpload";
@@ -15,7 +14,9 @@ export default function ChatPage({ onOpenConversation }: Props) {
   const { data: stories = [] } = useStories();
   const addStory = useAddStory();
   const { uploadFile, uploading, progress } = useStorageUpload();
-  const [viewingStory, setViewingStory] = useState<Story | null>(null);
+  const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(
+    null,
+  );
   const storyFileRef = useRef<HTMLInputElement>(null);
 
   const handleAddStory = () => {
@@ -31,10 +32,7 @@ export default function ChatPage({ onOpenConversation }: Props) {
       const url = await uploadFile(file);
       const caption = window.prompt("Add a caption (optional):") ?? "";
       await addStory.mutateAsync({ imageUrl: url, caption });
-      toast.success("Story added!");
-    } catch {
-      toast.error("Failed to add story");
-    }
+    } catch {}
     // reset input
     e.target.value = "";
   };
@@ -87,7 +85,7 @@ export default function ChatPage({ onOpenConversation }: Props) {
             <button
               key={story.id.toString()}
               type="button"
-              onClick={() => setViewingStory(story)}
+              onClick={() => setViewingStoryIndex(stories.indexOf(story))}
               data-ocid="chat.secondary_button"
               className="flex-shrink-0 flex flex-col items-center gap-1"
             >
@@ -199,10 +197,11 @@ export default function ChatPage({ onOpenConversation }: Props) {
       </div>
 
       {/* Story viewer */}
-      {viewingStory && (
+      {viewingStoryIndex !== null && (
         <StoryViewerModal
-          story={viewingStory}
-          onClose={() => setViewingStory(null)}
+          stories={stories}
+          initialIndex={viewingStoryIndex}
+          onClose={() => setViewingStoryIndex(null)}
         />
       )}
     </div>

@@ -24,14 +24,17 @@ import {
   Upload,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { Gender } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useCallerProfile,
   useCreateProfile,
+  usePremiumStatus,
   usePrivacyVisibility,
+  useSetPremiumStatus,
   useSetPrivacyVisibility,
+  useSetShowLastActive,
+  useShowLastActive,
 } from "../hooks/useQueries";
 import type { PrivacyVisibility } from "../hooks/useQueries";
 import { useStorageUpload } from "../hooks/useStorageUpload";
@@ -85,21 +88,6 @@ const BACKEND_TO_UI: Record<string, string> = {
 
 type VisibilityOption = "everyone" | "matches" | "hidden";
 
-function loadLocalPrivacySettings() {
-  try {
-    return {
-      showLastActive:
-        localStorage.getItem("bandhan_show_last_active") !== "false",
-      isPremium: localStorage.getItem("bandhan_is_premium") === "true",
-    };
-  } catch {
-    return {
-      showLastActive: true,
-      isPremium: false,
-    };
-  }
-}
-
 interface MyProfilePageProps {
   onCallHistory?: () => void;
 }
@@ -130,32 +118,31 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
     }
   }, [backendVisibility]);
 
-  // Non-visibility privacy settings stay in localStorage
-  const localSettings = loadLocalPrivacySettings();
-  const [showLastActive, setShowLastActive] = useState(
-    localSettings.showLastActive,
-  );
-  const [isPremium, setIsPremium] = useState(localSettings.isPremium);
+  // Premium and last active from backend
+  const { data: backendPremium = false } = usePremiumStatus();
+  const { data: backendShowLastActive = true } = useShowLastActive();
+  const setPremiumMutation = useSetPremiumStatus();
+  const setShowLastActiveMutation = useSetShowLastActive();
+  const [showLastActive, setShowLastActive] = useState(true);
+  const [isPremium, setIsPremium] = useState(false);
 
-  const saveLocalPrivacy = (sla: boolean, prem: boolean) => {
-    try {
-      localStorage.setItem("bandhan_show_last_active", String(sla));
-      localStorage.setItem("bandhan_is_premium", String(prem));
-    } catch {}
-  };
+  // Sync backend values to local state
+  useEffect(() => {
+    setIsPremium(backendPremium);
+  }, [backendPremium]);
+  useEffect(() => {
+    setShowLastActive(backendShowLastActive);
+  }, [backendShowLastActive]);
 
   const handleVisibilityChange = async (
     val: VisibilityOption,
-    label: string,
+    _label: string,
   ) => {
     setVisibility(val);
     const backendVal = UI_TO_BACKEND[val];
     try {
       await setPrivacyVisibilityMutation.mutateAsync(backendVal);
-      toast.success(`Visibility: ${label}`);
-    } catch {
-      toast.error("Failed to save visibility");
-    }
+    } catch {}
   };
 
   const [name, setName] = useState("");
@@ -229,10 +216,7 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
     try {
       const url = await uploadFile(file);
       setPhotoUrl(url);
-      toast.success("Photo uploaded!");
-    } catch {
-      toast.error("Photo upload failed");
-    }
+    } catch {}
     e.target.value = "";
   };
 
@@ -270,9 +254,7 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
         n[idx] = url;
         return n;
       });
-      toast.success(`Media ${idx + 1} uploaded!`);
     } catch {
-      toast.error(`Media ${idx + 1} upload failed`);
     } finally {
       setUploadingMedia((p) => {
         const n = [...p];
@@ -308,11 +290,8 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
         aboutMe,
         phone: phone || null,
       });
-      toast.success("Profile saved!");
       setEditing(false);
-    } catch {
-      toast.error("Save failed");
-    }
+    } catch {}
   };
 
   if (isLoading)
@@ -551,7 +530,7 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
                 onClick={() => {
                   const next = !showLastActive;
                   setShowLastActive(next);
-                  saveLocalPrivacy(next, isPremium);
+                  setShowLastActiveMutation.mutateAsync(next);
                 }}
                 data-ocid="myprofile.toggle"
                 className="w-12 h-6 rounded-full transition-all relative"
@@ -630,10 +609,7 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
                   onClick={() => {
                     const next = !isPremium;
                     setIsPremium(next);
-                    saveLocalPrivacy(showLastActive, next);
-                    toast.success(
-                      next ? "👑 Premium activated!" : "Premium deactivated",
-                    );
+                    setPremiumMutation.mutateAsync(next);
                   }}
                   data-ocid="myprofile.toggle"
                   className="px-3 py-1.5 rounded-lg text-xs font-bold"

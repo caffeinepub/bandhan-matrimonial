@@ -1,26 +1,25 @@
 # Bandhan Matrimonial
 
 ## Current State
-Chat messages are sent/received via backend. Reactions, edits, and deletes are currently stored only in local React state (not persisted). The Message type has id, fromUserId, toUserId, text, timestamp, read fields.
+App has a NotificationBell component in the top-right of the main screen that shows a dropdown with current match requests and mutual match notifications. Notifications are tracked using localStorage for seen/unseen state. The dropdown has a max-height with overflow scroll.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `reactToMessage(messageId, emoji)` backend function - stores a reaction emoji on a message
-- `editMessage(messageId, newText)` backend function - updates message text (only sender can edit)
-- `deleteMessage(messageId)` backend function - marks message as deleted (only sender can delete)
-- `reaction`, `editedText`, `deleted` optional fields on Message type
+- `NotificationHistoryPage` -- a full-page notification history view listing all past notifications (match requests and mutual matches) with timestamps, profile avatars, notification type icons, and read/unread indicators.
+- "See all" / "View history" button at the bottom of the NotificationBell dropdown that navigates to the history page.
+- `notifications` page type in the Page union in App.tsx.
+- Route handling in App.tsx to render NotificationHistoryPage with a back button.
+- Notification history persisted to localStorage so past notifications remain visible even after they're gone from backend state.
 
 ### Modify
-- `getMessages` to filter out deleted messages OR include deleted flag
-- `ConversationPage.tsx` to call backend for react/edit/delete instead of local state only, and load reactions/edits/deleted status from returned messages
+- `App.tsx`: add `"notifications"` to the Page type and render NotificationHistoryPage.
+- `NotificationBell.tsx`: add a "See all" link/button at the bottom of the dropdown that calls a prop/callback to navigate to the notifications page, and persist notifications to localStorage history.
 
 ### Remove
-- Nothing removed; local state is kept as fallback for optimistic updates
+- Nothing removed.
 
 ## Implementation Plan
-1. Add `reaction: ?Text`, `isDeleted: Bool` fields to Message type in backend
-2. Add `reactToMessage`, `editMessage`, `deleteMessage` backend functions
-3. Update `getMessages` to return updated messages (with reaction/isDeleted fields)
-4. Update `backend.d.ts` with new function signatures and updated Message type
-5. Update `ConversationPage.tsx` to call backend functions and read persisted state from messages
+1. Create `src/frontend/src/pages/NotificationHistoryPage.tsx` -- full page with header, back button, grouped or chronological list of all notifications from localStorage history, empty state.
+2. Update `NotificationBell.tsx` to accept optional `onViewAll?: () => void` prop and show a "See all" button at dropdown bottom; also persist each new notification to a localStorage history array.
+3. Update `App.tsx` to add `"notifications"` to Page type, pass `onViewAll` to NotificationBell, and render NotificationHistoryPage with `onBack`.

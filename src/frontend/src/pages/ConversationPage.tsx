@@ -12,7 +12,6 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import type { Message, Profile } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
@@ -160,9 +159,7 @@ export default function ConversationPage({
     setTypingMutation.mutate({ toUserId: profile.userId, isTyping: false });
     try {
       await sendMessage.mutateAsync({ toUserId: profile.userId, text });
-    } catch {
-      toast.error("Failed to send message");
-    }
+    } catch {}
   };
 
   const openContextMenu = (
@@ -632,7 +629,6 @@ export default function ConversationPage({
             type="button"
             className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: "oklch(0.18 0.05 320)" }}
-            onClick={() => toast("Emoji picker coming soon!")}
           >
             <Smile
               className="w-4 h-4"

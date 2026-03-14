@@ -1,7 +1,15 @@
 import { Input } from "@/components/ui/input";
-import { Heart, Reply, Send, X } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Reply,
+  Send,
+  Share2,
+  X,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Story } from "../backend";
 import {
   useAddStoryComment,
@@ -13,17 +21,45 @@ import {
 } from "../hooks/useQueries";
 
 interface StoryViewerModalProps {
-  story: Story;
+  stories: Story[];
+  initialIndex: number;
   onClose: () => void;
 }
 
-export default function StoryViewerModal({
+const STORY_DURATION = 5000;
+
+function timeAgo(timestamp: bigint): string {
+  const ms = Number(timestamp) / 1_000_000;
+  const diff = Date.now() - ms;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function StoryContent({
   story,
   onClose,
-}: StoryViewerModalProps) {
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+  progress,
+}: {
+  story: Story;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  hasPrev: boolean;
+  hasNext: boolean;
+  progress: number;
+}) {
   const [comment, setComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<bigint | null>(null);
   const [replyText, setReplyText] = useState("");
+  const commentsEndRef = useRef<HTMLDivElement>(null);
 
   const { data: comments = [], isLoading: commentsLoading } = useStoryComments(
     story.id,
@@ -41,8 +77,21 @@ export default function StoryViewerModal({
       } else {
         await likeStory.mutateAsync(story.id);
       }
+    } catch {}
+  };
+
+  const handleShare = async () => {
+    const text = `Check out ${story.authorName}'s story on Bandhan Matrimonial!`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Bandhan Matrimonial", text });
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
     } catch {
-      toast.error("Failed to update like");
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {}
     }
   };
 
@@ -51,9 +100,11 @@ export default function StoryViewerModal({
     try {
       await addComment.mutateAsync({ storyId: story.id, text: comment.trim() });
       setComment("");
-    } catch {
-      toast.error("Failed to add comment");
-    }
+      setTimeout(
+        () => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }),
+        100,
+      );
+    } catch {}
   };
 
   const handleReply = async () => {
@@ -66,9 +117,7 @@ export default function StoryViewerModal({
       });
       setReplyText("");
       setReplyingTo(null);
-    } catch {
-      toast.error("Failed to add reply");
-    }
+    } catch {}
   };
 
   const topLevelComments = comments.filter((c) => !c.parentCommentId);
@@ -77,26 +126,84 @@ export default function StoryViewerModal({
       (c) => c.parentCommentId && c.parentCommentId === commentId,
     );
 
+  const isTyping = comment.length > 0 || replyText.length > 0;
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col overflow-hidden"
-      style={{ background: "rgba(0,0,0,0.97)" }}
-      data-ocid="story_viewer.modal"
-    >
+    <div className="relative w-full h-full flex flex-col">
+      {/* Full-screen background image */}
+      {story.imageUrl ? (
+        story.imageUrl.match(/\.(mp4|webm|ogg)$/i) ? (
+          <video
+            src={story.imageUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          >
+            <track kind="captions" />
+          </video>
+        ) : (
+          <img
+            src={story.imageUrl}
+            alt="story"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )
+      ) : (
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+        />
+      )}
+
+      {/* Top gradient overlay */}
+      <div
+        className="absolute top-0 left-0 right-0 h-40 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)",
+        }}
+      />
+      {/* Bottom gradient overlay */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-72 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.92) 0%, transparent 100%)",
+        }}
+      />
+
+      {/* Progress bars */}
+      <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 px-3 pt-3">
+        {/* single progress bar since we just cycle stories */}
+        <div
+          className="flex-1 h-0.5 rounded-full overflow-hidden"
+          style={{ background: "rgba(255,255,255,0.3)" }}
+        >
+          <div
+            className="h-full rounded-full transition-none"
+            style={{
+              width: `${progress * 100}%`,
+              background: "white",
+              transitionProperty: isTyping ? "none" : "width",
+              transitionDuration: "0ms",
+            }}
+          />
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-10 pb-3 flex-shrink-0">
+      <div className="absolute top-6 left-0 right-0 z-20 flex items-center justify-between px-4 pt-2">
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center"
+            className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center"
             style={{
               background: "linear-gradient(135deg,#e11d48,#7c3aed)",
               padding: 2,
             }}
           >
-            <div
-              className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
-              style={{ background: "#1a0a1e" }}
-            >
+            <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center bg-black">
               {story.authorPhoto ? (
                 <img
                   src={story.authorPhoto}
@@ -104,21 +211,18 @@ export default function StoryViewerModal({
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-white font-bold text-base">
+                <span className="text-white font-bold text-sm">
                   {story.authorName.charAt(0)}
                 </span>
               )}
             </div>
           </div>
           <div>
-            <p className="text-white font-semibold text-sm">
+            <p className="text-white font-semibold text-sm drop-shadow">
               {story.authorName}
             </p>
-            <p className="text-white/50 text-[10px]">
-              {new Date(Number(story.timestamp) / 1_000_000).toLocaleTimeString(
-                [],
-                { hour: "2-digit", minute: "2-digit" },
-              )}
+            <p className="text-white/60 text-[10px]">
+              {timeAgo(story.timestamp)}
             </p>
           </div>
         </div>
@@ -126,65 +230,52 @@ export default function StoryViewerModal({
           type="button"
           data-ocid="story_viewer.close_button"
           onClick={onClose}
-          className="w-9 h-9 rounded-full flex items-center justify-center"
-          style={{ background: "rgba(255,255,255,0.1)" }}
+          className="w-8 h-8 rounded-full flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.4)" }}
         >
           <X className="w-4 h-4 text-white" />
         </button>
       </div>
 
-      {/* Story image */}
-      <div className="flex-1 flex items-center justify-center px-4 min-h-0">
-        {story.imageUrl ? (
-          story.imageUrl.match(/\.(mp4|webm|ogg)$/i) ? (
-            <video
-              src={story.imageUrl}
-              controls
-              autoPlay
-              className="max-w-full max-h-full rounded-2xl object-contain"
-              style={{ maxHeight: "50vh" }}
-            >
-              <track kind="captions" />
-            </video>
-          ) : (
-            <img
-              src={story.imageUrl}
-              alt="story"
-              className="max-w-full rounded-2xl object-contain"
-              style={{ maxHeight: "50vh" }}
-            />
-          )
-        ) : (
-          <div
-            className="w-full max-w-sm aspect-[9/16] rounded-3xl flex items-center justify-center"
-            style={{
-              background: "linear-gradient(135deg,#e11d48,#7c3aed)",
-              maxHeight: "50vh",
-            }}
-          >
-            <p className="text-white text-xl font-bold">
-              {story.authorName}'s Story
-            </p>
-          </div>
-        )}
+      {/* Tap areas for prev/next */}
+      <div className="absolute inset-0 z-10 flex pointer-events-none">
+        <button
+          type="button"
+          data-ocid="story_viewer.secondary_button"
+          className="w-1/3 h-full pointer-events-auto flex items-center justify-start pl-2 opacity-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (hasPrev) onPrev();
+          }}
+          aria-label="Previous story"
+        >
+          {hasPrev && <ChevronLeft className="w-7 h-7 text-white/60" />}
+        </button>
+        <div className="flex-1" />
+        <button
+          type="button"
+          data-ocid="story_viewer.primary_button"
+          className="w-1/3 h-full pointer-events-auto flex items-center justify-end pr-2 opacity-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+          aria-label="Next story"
+        >
+          {hasNext && <ChevronRight className="w-7 h-7 text-white/60" />}
+        </button>
       </div>
 
-      {story.caption && (
-        <p className="px-4 py-1 text-white/80 text-sm text-center flex-shrink-0">
-          {story.caption}
-        </p>
-      )}
+      {/* Bottom content */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-6">
+        {story.caption && (
+          <p className="text-white/90 text-sm text-center mb-3 drop-shadow">
+            {story.caption}
+          </p>
+        )}
 
-      {/* Like + comments area */}
-      <div
-        className="flex-shrink-0 px-4 pb-2 pt-1"
-        style={{
-          background:
-            "linear-gradient(0deg, rgba(10,0,16,0.95) 0%, transparent 100%)",
-        }}
-      >
-        {/* Like row */}
-        <div className="flex items-center gap-2 mb-2">
+        {/* Like + Share row */}
+        <div className="flex items-center gap-2 mb-3">
           <button
             type="button"
             data-ocid="story_viewer.toggle"
@@ -193,19 +284,27 @@ export default function StoryViewerModal({
             style={{
               background: hasLiked
                 ? "linear-gradient(135deg,#e11d48,#db2777)"
-                : "rgba(255,255,255,0.1)",
+                : "rgba(255,255,255,0.12)",
             }}
           >
             <Heart
-              className={`w-4 h-4 ${
-                hasLiked ? "fill-white text-white" : "text-white/70"
-              }`}
+              className={`w-4 h-4 ${hasLiked ? "fill-white text-white" : "text-white/70"}`}
             />
             <span className="text-white text-xs font-medium">
               {Number(story.likesCount)}
             </span>
           </button>
-          <span className="text-white/40 text-xs">
+          <button
+            type="button"
+            data-ocid="story_viewer.secondary_button"
+            onClick={handleShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all"
+            style={{ background: "rgba(255,255,255,0.12)" }}
+          >
+            <Share2 className="w-4 h-4 text-white/70" />
+            <span className="text-white text-xs">Share</span>
+          </button>
+          <span className="text-white/40 text-xs ml-auto">
             {commentsLoading ? "..." : `${comments.length} comments`}
           </span>
         </div>
@@ -246,7 +345,6 @@ export default function StoryViewerModal({
                     </button>
                   </div>
                 </div>
-                {/* Replies */}
                 {getReplies(c.id).map((r) => (
                   <div
                     key={r.id.toString()}
@@ -270,7 +368,6 @@ export default function StoryViewerModal({
                     </div>
                   </div>
                 ))}
-                {/* Reply input */}
                 {replyingTo === c.id && (
                   <div className="flex items-center gap-2 ml-8 mt-1.5">
                     <Input
@@ -297,6 +394,7 @@ export default function StoryViewerModal({
                 )}
               </div>
             ))}
+            <div ref={commentsEndRef} />
           </div>
         )}
 
@@ -308,12 +406,12 @@ export default function StoryViewerModal({
             placeholder={`Comment on ${story.authorName}'s story...`}
             data-ocid="story_viewer.comment_input"
             className="h-10 rounded-full text-sm border-white/20 text-white placeholder:text-white/40 flex-1"
-            style={{ background: "rgba(255,255,255,0.08)" }}
+            style={{ background: "rgba(255,255,255,0.1)" }}
             onKeyDown={(e) => e.key === "Enter" && handleComment()}
           />
           <button
             type="button"
-            data-ocid="story_viewer.primary_button"
+            data-ocid="story_viewer.submit_button"
             onClick={handleComment}
             disabled={addComment.isPending}
             className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
@@ -324,5 +422,186 @@ export default function StoryViewerModal({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function StoryViewerModal({
+  stories,
+  initialIndex,
+  onClose,
+}: StoryViewerModalProps) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const progressRef = useRef(0);
+  const lastTickRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const story = stories[currentIndex];
+
+  const goNext = useCallback(() => {
+    if (currentIndex < stories.length - 1) {
+      setCurrentIndex((i) => i + 1);
+      setProgress(0);
+      progressRef.current = 0;
+    } else {
+      onClose();
+    }
+  }, [currentIndex, stories.length, onClose]);
+
+  const goPrev = useCallback(() => {
+    if (currentIndex > 0) {
+      setCurrentIndex((i) => i - 1);
+      setProgress(0);
+      progressRef.current = 0;
+    }
+  }, [currentIndex]);
+
+  // Auto-advance timer using rAF
+  useEffect(() => {
+    progressRef.current = 0;
+    setProgress(0);
+    lastTickRef.current = null;
+
+    const tick = (ts: number) => {
+      if (lastTickRef.current === null) lastTickRef.current = ts;
+      const delta = ts - lastTickRef.current;
+      lastTickRef.current = ts;
+
+      if (!paused) {
+        progressRef.current = Math.min(
+          1,
+          progressRef.current + delta / STORY_DURATION,
+        );
+        setProgress(progressRef.current);
+        if (progressRef.current >= 1) {
+          goNext();
+          return;
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [paused, goNext]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") goNext();
+      if (e.key === "ArrowLeft") goPrev();
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [goNext, goPrev, onClose]);
+
+  if (!story) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        style={{ background: "rgba(0,0,0,0.97)" }}
+        data-ocid="story_viewer.modal"
+      >
+        {/* Story card container - max width like mobile */}
+        <div
+          className="relative w-full max-w-sm h-full max-h-screen overflow-hidden"
+          style={{ touchAction: "none" }}
+          onPointerDown={(_e) => {
+            // Long press to pause
+            longPressRef.current = setTimeout(() => setPaused(true), 200);
+          }}
+          onPointerUp={() => {
+            if (longPressRef.current) clearTimeout(longPressRef.current);
+            setPaused(false);
+          }}
+          onPointerLeave={() => {
+            if (longPressRef.current) clearTimeout(longPressRef.current);
+            setPaused(false);
+          }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentIndex}
+              initial={{ opacity: 0, scale: 1.02 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="w-full h-full"
+            >
+              <StoryContent
+                story={story}
+                onClose={onClose}
+                onPrev={goPrev}
+                onNext={goNext}
+                hasPrev={currentIndex > 0}
+                hasNext={currentIndex < stories.length - 1}
+                progress={progress}
+              />
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Story index dots */}
+          {stories.length > 1 && (
+            <div className="absolute top-2 left-0 right-0 z-30 flex gap-1 px-3">
+              {stories.map((s, i) => (
+                <div
+                  key={s.id.toString()}
+                  className="flex-1 h-0.5 rounded-full overflow-hidden"
+                  style={{ background: "rgba(255,255,255,0.3)" }}
+                >
+                  <div
+                    className="h-full rounded-full bg-white"
+                    style={{
+                      width:
+                        i < currentIndex
+                          ? "100%"
+                          : i === currentIndex
+                            ? `${progress * 100}%`
+                            : "0%",
+                      transition:
+                        i === currentIndex && !paused ? "none" : "none",
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Prev/Next side buttons for desktop */}
+        {currentIndex > 0 && (
+          <button
+            type="button"
+            data-ocid="story_viewer.secondary_button"
+            onClick={goPrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center hidden md:flex"
+            style={{ background: "rgba(255,255,255,0.15)" }}
+          >
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </button>
+        )}
+        {currentIndex < stories.length - 1 && (
+          <button
+            type="button"
+            data-ocid="story_viewer.primary_button"
+            onClick={goNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center hidden md:flex"
+            style={{ background: "rgba(255,255,255,0.15)" }}
+          >
+            <ChevronRight className="w-5 h-5 text-white" />
+          </button>
+        )}
+      </motion.div>
+    </AnimatePresence>
   );
 }

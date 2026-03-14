@@ -137,10 +137,7 @@ export default function ProfileSetupPage({ onComplete }: Props) {
     try {
       const url = await uploadFile(file);
       setPhotoUrl(url);
-      toast.success("Photo uploaded!");
-    } catch {
-      toast.error("Photo upload failed");
-    }
+    } catch {}
     e.target.value = "";
   };
 
@@ -179,9 +176,7 @@ export default function ProfileSetupPage({ onComplete }: Props) {
         n[idx] = url;
         return n;
       });
-      toast.success(`Media ${idx + 1} uploaded!`);
     } catch {
-      toast.error(`Media ${idx + 1} upload failed`);
     } finally {
       setUploadingMedia((p) => {
         const n = [...p];
@@ -203,7 +198,6 @@ export default function ProfileSetupPage({ onComplete }: Props) {
 
   const handleSubmit = async () => {
     if (!name || !age) {
-      toast.error("Name and age are required");
       return;
     }
     try {

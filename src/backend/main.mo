@@ -152,6 +152,8 @@ actor {
   let matches = Map.empty<Principal, Set.Set<Principal>>();
   let matchRequests = Map.empty<Principal, Map.Map<Principal, { #pending; #accepted; #declined }>>();
   let privacySettings = Map.empty<Principal, PrivacyVisibility>();
+  let premiumStatus = Map.empty<Principal, Bool>();
+  let showLastActiveStatus = Map.empty<Principal, Bool>();
 
   let messages = Map.empty<Principal, List.List<Message>>();
   var nextMessageId = 1;
@@ -198,6 +200,34 @@ actor {
       Runtime.trap("Unauthorized");
     };
     privacySettings.get(caller).get(#everyone);
+  };
+
+  public shared ({ caller }) func setPremiumStatus(isPremium : Bool) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can set premium status");
+    };
+    premiumStatus.add(caller, isPremium);
+  };
+
+  public query ({ caller }) func getPremiumStatus() : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+    premiumStatus.get(caller).get(false);
+  };
+
+  public shared ({ caller }) func setShowLastActive(show : Bool) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can set last active setting");
+    };
+    showLastActiveStatus.add(caller, show);
+  };
+
+  public query ({ caller }) func getShowLastActive() : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+    showLastActiveStatus.get(caller).get(true);
   };
 
   public shared ({ caller }) func createOrUpdateProfile(

@@ -1,6 +1,5 @@
 import { Check, X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 import {
   useAcceptRequest,
   useDeclineRequest,
@@ -96,10 +95,7 @@ export default function RequestsPage() {
                 onClick={async () => {
                   try {
                     await decline.mutateAsync(profile.userId);
-                    toast.success("Request declined");
-                  } catch {
-                    toast.error("Error");
-                  }
+                  } catch {}
                 }}
                 data-ocid={`requests.cancel_button.${i + 1}`}
                 className="w-10 h-10 rounded-full flex items-center justify-center"
@@ -115,10 +111,7 @@ export default function RequestsPage() {
                 onClick={async () => {
                   try {
                     await accept.mutateAsync(profile.userId);
-                    toast.success("It's a match! 🎉");
-                  } catch {
-                    toast.error("Error");
-                  }
+                  } catch {}
                 }}
                 data-ocid={`requests.confirm_button.${i + 1}`}
                 className="w-10 h-10 rounded-full flex items-center justify-center"

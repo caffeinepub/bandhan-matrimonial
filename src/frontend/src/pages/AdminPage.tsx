@@ -1,5 +1,4 @@
 import { Trash2 } from "lucide-react";
-import { toast } from "sonner";
 import { useAdminDeleteProfile, useAdminProfiles } from "../hooks/useQueries";
 
 export default function AdminPage() {
@@ -66,10 +65,7 @@ export default function AdminPage() {
                 if (!confirm("Delete this profile?")) return;
                 try {
                   await deleteProfile.mutateAsync(profile.userId);
-                  toast.success("Deleted");
-                } catch {
-                  toast.error("Error");
-                }
+                } catch {}
               }}
               data-ocid={`admin.delete_button.${i + 1}`}
               className="w-9 h-9 rounded-full flex items-center justify-center"

@@ -1,6 +1,5 @@
 import { Mic, MicOff, Phone, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { CallSignalType, CallStatus, CallType, type Profile } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { useLogCall, useStoreCallSignal } from "../hooks/useQueries";
@@ -199,7 +198,6 @@ export default function VoiceCallPage({
         }, 1500);
       } catch {
         if (!cancelled) {
-          toast.error("Microphone permission denied");
           onEnd();
         }
       }

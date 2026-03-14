@@ -1,7 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Heart, Search, X } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { Profile } from "../backend";
 import {
   useAllProfiles,
@@ -55,10 +54,7 @@ export default function BrowsePage({ onViewProfile }: Props) {
     playMatchSentSound();
     try {
       await sendRequest.mutateAsync(p.userId);
-      toast.success("Match request sent! 💕");
-    } catch {
-      toast.error("Failed to send request");
-    }
+    } catch {}
   };
 
   const handleSkip = (p: Profile) => {
@@ -67,6 +63,21 @@ export default function BrowsePage({ onViewProfile }: Props) {
 
   return (
     <div className="min-h-screen pb-4" style={{ background: "#0a0010" }}>
+      {/* Auto-scroll keyframe */}
+      <style>{`
+        @keyframes scroll-rtl {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .browse-scroll-track {
+          animation: scroll-rtl 18s linear infinite;
+        }
+        .browse-scroll-track:hover,
+        .browse-scroll-track:active {
+          animation-play-state: paused;
+        }
+      `}</style>
+
       <div className="px-5 pt-14 pb-3 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Discover</h1>
@@ -249,66 +260,83 @@ export default function BrowsePage({ onViewProfile }: Props) {
             </button>
           </div>
 
-          {/* More profiles grid */}
+          {/* More profiles - auto-scrolling horizontal strip */}
           {filtered.length > 1 && (
             <div className="mt-5">
               <p className="text-white/50 text-xs uppercase tracking-wider mb-3">
                 More Profiles
               </p>
-              <div className="grid grid-cols-3 gap-2">
-                {filtered.slice(1, 7).map((p, i) => (
-                  <button
-                    key={p.userId.toString()}
-                    type="button"
-                    onClick={() => onViewProfile(p)}
-                    data-ocid={`browse.item.${i + 1}`}
-                    className="relative rounded-2xl overflow-hidden aspect-[3/4] active:scale-95 transition-transform"
-                  >
-                    {p.photoUrl ? (
-                      <img
-                        src={p.photoUrl}
-                        alt={p.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="w-full h-full flex items-center justify-center text-2xl font-bold text-white"
-                        style={{
-                          background: `linear-gradient(160deg,hsl(${(p.name.charCodeAt(0) * 10) % 360},70%,35%),hsl(${(p.name.charCodeAt(0) * 10 + 120) % 360},70%,25%))`,
-                        }}
+              {/* Overflow container */}
+              <div
+                className="overflow-hidden"
+                style={{
+                  WebkitMaskImage:
+                    "linear-gradient(to right,transparent,black 8%,black 92%,transparent)",
+                }}
+              >
+                {/* Scrolling track — duplicated for seamless loop */}
+                <div
+                  className="browse-scroll-track flex gap-2"
+                  style={{ width: "max-content" }}
+                >
+                  {[...filtered.slice(1, 9), ...filtered.slice(1, 9)].map(
+                    (p, i) => (
+                      <button
+                        key={`${p.userId.toString()}_${i}`}
+                        type="button"
+                        onClick={() => onViewProfile(p)}
+                        data-ocid={`browse.item.${(i % 8) + 1}`}
+                        className="relative rounded-2xl overflow-hidden flex-shrink-0 active:scale-95 transition-transform"
+                        style={{ width: 110, height: 146 }}
                       >
-                        {p.name.charAt(0)}
-                      </div>
-                    )}
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        background:
-                          "linear-gradient(to top,rgba(10,0,16,0.8) 0%,transparent 50%)",
-                      }}
-                    />
-                    {isPremiumProfile(p) && (
-                      <div
-                        className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
-                        style={{
-                          background: "linear-gradient(135deg,#f59e0b,#d97706)",
-                          boxShadow: "0 1px 6px rgba(245,158,11,0.6)",
-                          fontSize: "10px",
-                        }}
-                      >
-                        👑
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 left-2">
-                      <p className="text-white text-xs font-semibold truncate">
-                        {p.name}
-                      </p>
-                      <p className="text-white/60 text-[10px]">
-                        {Number(p.age)}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                        {p.photoUrl ? (
+                          <img
+                            src={p.photoUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="w-full h-full flex items-center justify-center text-2xl font-bold text-white"
+                            style={{
+                              background: `linear-gradient(160deg,hsl(${(p.name.charCodeAt(0) * 10) % 360},70%,35%),hsl(${(p.name.charCodeAt(0) * 10 + 120) % 360},70%,25%))`,
+                            }}
+                          >
+                            {p.name.charAt(0)}
+                          </div>
+                        )}
+                        <div
+                          className="absolute inset-0"
+                          style={{
+                            background:
+                              "linear-gradient(to top,rgba(10,0,16,0.85) 0%,transparent 55%)",
+                          }}
+                        />
+                        {isPremiumProfile(p) && (
+                          <div
+                            className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                            style={{
+                              background:
+                                "linear-gradient(135deg,#f59e0b,#d97706)",
+                              boxShadow: "0 1px 6px rgba(245,158,11,0.6)",
+                              fontSize: "10px",
+                            }}
+                          >
+                            👑
+                          </div>
+                        )}
+                        <div className="absolute bottom-2 left-2">
+                          <p className="text-white text-xs font-semibold truncate max-w-[90px]">
+                            {p.name}
+                          </p>
+                          <p className="text-white/60 text-[10px]">
+                            {Number(p.age)}
+                          </p>
+                        </div>
+                      </button>
+                    ),
+                  )}
+                </div>
               </div>
             </div>
           )}
