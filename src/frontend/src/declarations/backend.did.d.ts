@@ -39,14 +39,19 @@ export type CallType = { 'video' : null } |
 export type Gender = { 'other' : null } |
   { 'female' : null } |
   { 'male' : null };
-export interface Message {
+export interface MessageWithMeta {
   'id' : bigint,
+  'isDeleted' : boolean,
   'read' : boolean,
   'text' : string,
   'toUserId' : Principal,
   'fromUserId' : Principal,
   'timestamp' : bigint,
+  'reaction' : [] | [string],
 }
+export type PrivacyVisibility = { 'everyone' : null } |
+  { 'matchesOnly' : null } |
+  { 'hidden' : null };
 export interface Profile {
   'age' : bigint,
   'bio' : string,
@@ -91,6 +96,20 @@ export interface StoryComment {
   'authorName' : string,
   'timestamp' : bigint,
 }
+export type StoryNotifType = { 'like' : null } |
+  { 'comment' : null } |
+  { 'reply' : null };
+export interface StoryNotification {
+  'id' : bigint,
+  'actorName' : string,
+  'notifType' : StoryNotifType,
+  'storyId' : bigint,
+  'storyOwnerId' : Principal,
+  'actorPhoto' : [] | [string],
+  'text' : string,
+  'actorUserId' : Principal,
+  'timestamp' : bigint,
+}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
@@ -125,7 +144,10 @@ export interface _SERVICE {
   'acceptMatchRequest' : ActorMethod<[Principal], undefined>,
   'addStory' : ActorMethod<[string, string], undefined>,
   'addStoryComment' : ActorMethod<[bigint, string], undefined>,
+  'addStoryReaction' : ActorMethod<[bigint, string], undefined>,
   'adminDeleteProfile' : ActorMethod<[Principal], undefined>,
+  'adminDeleteStory' : ActorMethod<[bigint], undefined>,
+  'adminGetAllStories' : ActorMethod<[], Array<Story>>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'consumeCallSignals' : ActorMethod<[Principal], Array<CallSignal>>,
   'createOrUpdateProfile' : ActorMethod<
@@ -155,9 +177,13 @@ export interface _SERVICE {
     undefined
   >,
   'declineMatchRequest' : ActorMethod<[Principal], undefined>,
+  'deleteMessage' : ActorMethod<[bigint], undefined>,
+  'deleteStory' : ActorMethod<[bigint], undefined>,
+  'editMessage' : ActorMethod<[bigint, string], undefined>,
   'getAllProfiles' : ActorMethod<[], Array<Profile>>,
   'getAllWithRequestedCount' : ActorMethod<[], Array<[Profile, bigint]>>,
   'getCallHistory' : ActorMethod<[], Array<[CallHistory, Profile]>>,
+  'getCallerStoryReaction' : ActorMethod<[bigint], [] | [string]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [Profile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getMatchRequests' : ActorMethod<
@@ -171,10 +197,17 @@ export interface _SERVICE {
       ]
     >
   >,
-  'getMessages' : ActorMethod<[Principal], Array<Message>>,
+  'getMessages' : ActorMethod<[Principal], Array<MessageWithMeta>>,
   'getMutualMatches' : ActorMethod<[], Array<Profile>>,
+  'getMyStoryNotifications' : ActorMethod<[], Array<StoryNotification>>,
+  'getPremiumStatus' : ActorMethod<[], boolean>,
+  'getPrivacyVisibility' : ActorMethod<[], PrivacyVisibility>,
+  'getShowLastActive' : ActorMethod<[], boolean>,
   'getStories' : ActorMethod<[], Array<Story>>,
   'getStoryComments' : ActorMethod<[bigint], Array<StoryComment>>,
+  'getStoryReactions' : ActorMethod<[bigint], Array<[string, bigint]>>,
+  'getStoryViewCount' : ActorMethod<[bigint], bigint>,
+  'getStoryViewers' : ActorMethod<[bigint], Array<Profile>>,
   'getTypingStatus' : ActorMethod<[Principal], boolean>,
   'getUserProfile' : ActorMethod<[Principal], [] | [Profile]>,
   'hasLikedStory' : ActorMethod<[bigint], boolean>,
@@ -183,10 +216,15 @@ export interface _SERVICE {
   'likeStory' : ActorMethod<[bigint], undefined>,
   'logCall' : ActorMethod<[Principal, CallType, bigint, CallStatus], undefined>,
   'markMessageRead' : ActorMethod<[bigint], undefined>,
+  'reactToMessage' : ActorMethod<[bigint, string], undefined>,
+  'recordStoryView' : ActorMethod<[bigint], undefined>,
   'replyToStoryComment' : ActorMethod<[bigint, bigint, string], undefined>,
   'searchProfiles' : ActorMethod<[string], Array<Profile>>,
   'sendMatchRequest' : ActorMethod<[Principal], undefined>,
   'sendMessage' : ActorMethod<[Principal, string], undefined>,
+  'setPremiumStatus' : ActorMethod<[boolean], undefined>,
+  'setPrivacyVisibility' : ActorMethod<[PrivacyVisibility], undefined>,
+  'setShowLastActive' : ActorMethod<[boolean], undefined>,
   'setTyping' : ActorMethod<[Principal, boolean], undefined>,
   'storeCallSignal' : ActorMethod<
     [Principal, CallSignalType, string, CallType],

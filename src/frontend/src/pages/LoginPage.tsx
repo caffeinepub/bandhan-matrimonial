@@ -534,15 +534,7 @@ export default function LoginPage() {
 
         <footer className="text-center pt-6">
           <p className="text-xs text-white/25">
-            © {new Date().getFullYear()}. Built with ❤️ using{" "}
-            <a
-              href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-white/50 transition-colors"
-            >
-              caffeine.ai
-            </a>
+            © 2026. I would ❤️ using Bandhan
           </p>
         </footer>
       </div>

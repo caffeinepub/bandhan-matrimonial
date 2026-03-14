@@ -6,27 +6,16 @@ import type {
   CallStatus,
   CallType,
   Gender,
-  Message,
+  MessageWithMeta,
   Profile,
   Story,
   StoryComment,
+  StoryNotification,
 } from "../backend";
 import { useActor } from "./useActor";
 
 // PrivacyVisibility type — matches backend enum values
 export type PrivacyVisibility = "everyone" | "matchesOnly" | "hidden";
-
-export interface StoryNotification {
-  id: bigint;
-  storyId: bigint;
-  storyOwnerId: Principal;
-  actorUserId: Principal;
-  actorName: string;
-  actorPhoto: [] | [string];
-  notifType: { like: null } | { comment: null } | { reply: null };
-  text: string;
-  timestamp: bigint;
-}
 
 export function useCallerProfile() {
   const { actor, isFetching } = useActor();
@@ -115,7 +104,7 @@ export function useAdminProfiles() {
 
 export function useMessages(withUserId: Principal | null, enabled = true) {
   const { actor, isFetching } = useActor();
-  return useQuery<Message[]>({
+  return useQuery<MessageWithMeta[]>({
     queryKey: ["messages", withUserId?.toString()],
     queryFn: async () => {
       if (!actor || !withUserId) return [];
@@ -407,9 +396,7 @@ export function useStoryNotifications() {
     queryFn: async () => {
       if (!actor) return [];
       try {
-        return (await (
-          actor as any
-        ).getMyStoryNotifications()) as StoryNotification[];
+        return (await actor.getMyStoryNotifications()) as StoryNotification[];
       } catch {
         return [];
       }
@@ -673,6 +660,129 @@ export function useSetShowLastActive() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["showLastActive"] });
+    },
+  });
+}
+
+// --- Story new features ---
+
+export function useDeleteStory() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (storyId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.deleteStory(storyId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
+export function useAdminDeleteStory() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (storyId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.adminDeleteStory(storyId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminStories"] });
+      queryClient.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
+export function useAdminStories() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Story[]>({
+    queryKey: ["adminStories"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.adminGetAllStories();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useStoryReactions(storyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Array<[string, bigint]>>({
+    queryKey: ["storyReactions", storyId?.toString()],
+    queryFn: async () => {
+      if (!actor || storyId === null) return [];
+      return actor.getStoryReactions(storyId);
+    },
+    enabled: !!actor && !isFetching && storyId !== null,
+  });
+}
+
+export function useCallerStoryReaction(storyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<string | null>({
+    queryKey: ["callerStoryReaction", storyId?.toString()],
+    queryFn: async () => {
+      if (!actor || storyId === null) return null;
+      return actor.getCallerStoryReaction(storyId);
+    },
+    enabled: !!actor && !isFetching && storyId !== null,
+  });
+}
+
+export function useAddStoryReaction() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      storyId,
+      emoji,
+    }: { storyId: bigint; emoji: string }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.addStoryReaction(storyId, emoji);
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["storyReactions", vars.storyId.toString()],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["callerStoryReaction", vars.storyId.toString()],
+      });
+    },
+  });
+}
+
+export function useStoryViewCount(storyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint>({
+    queryKey: ["storyViewCount", storyId?.toString()],
+    queryFn: async () => {
+      if (!actor || storyId === null) return BigInt(0);
+      return actor.getStoryViewCount(storyId);
+    },
+    enabled: !!actor && !isFetching && storyId !== null,
+  });
+}
+
+export function useStoryViewers(storyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<Profile[]>({
+    queryKey: ["storyViewers", storyId?.toString()],
+    queryFn: async () => {
+      if (!actor || storyId === null) return [];
+      return actor.getStoryViewers(storyId);
+    },
+    enabled: !!actor && !isFetching && storyId !== null,
+  });
+}
+
+export function useRecordStoryView() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (storyId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.recordStoryView(storyId);
     },
   });
 }

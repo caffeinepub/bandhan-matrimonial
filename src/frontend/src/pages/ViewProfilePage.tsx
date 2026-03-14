@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { Profile } from "../backend";
+import GalleryLightbox from "../components/GalleryLightbox";
 import { useSendMatchRequest } from "../hooks/useQueries";
 
 interface Props {
@@ -30,6 +31,8 @@ export default function ViewProfilePage({
   const sendRequest = useSendMatchRequest();
   const [liked, setLiked] = useState(false);
   const [mediaIdx, setMediaIdx] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const allMedia = [profile.photoUrl, ...profile.mediaUrls].filter(
     Boolean,
@@ -43,6 +46,11 @@ export default function ViewProfilePage({
     } catch {}
   };
 
+  const openLightbox = (index: number) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  };
+
   return (
     <div
       className="min-h-screen flex flex-col"
@@ -51,11 +59,18 @@ export default function ViewProfilePage({
       {/* Hero */}
       <div className="relative h-[55vh] flex-shrink-0">
         {allMedia.length > 0 ? (
-          <img
-            src={allMedia[mediaIdx]}
-            alt={profile.name}
-            className="w-full h-full object-cover"
-          />
+          <button
+            type="button"
+            className="w-full h-full cursor-pointer"
+            onClick={() => openLightbox(mediaIdx)}
+            data-ocid="viewprofile.canvas_target"
+          >
+            <img
+              src={allMedia[mediaIdx]}
+              alt={profile.name}
+              className="w-full h-full object-cover"
+            />
+          </button>
         ) : (
           <div
             className="w-full h-full flex items-center justify-center"
@@ -67,7 +82,7 @@ export default function ViewProfilePage({
           </div>
         )}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
             background: "linear-gradient(to top, #0a0010 30%, transparent 70%)",
           }}
@@ -79,12 +94,16 @@ export default function ViewProfilePage({
               <button
                 key={mediaUrl || String(i)}
                 type="button"
-                onClick={() => setMediaIdx(i)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMediaIdx(i);
+                }}
                 data-ocid="profile.toggle"
                 className="h-1 rounded-full transition-all"
                 style={{
                   width: i === mediaIdx ? 24 : 8,
-                  background: i === mediaIdx ? "white" : "white/40",
+                  background:
+                    i === mediaIdx ? "white" : "rgba(255,255,255,0.4)",
                 }}
               />
             ))}
@@ -99,7 +118,7 @@ export default function ViewProfilePage({
         >
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
-        <div className="absolute bottom-4 left-5 right-5">
+        <div className="absolute bottom-4 left-5 right-5 pointer-events-none">
           <h1 className="text-3xl font-bold text-white">
             {profile.name}, {Number(profile.age)}
           </h1>
@@ -208,22 +227,25 @@ export default function ViewProfilePage({
           </div>
         )}
 
-        {/* Media gallery */}
+        {/* Media gallery - clickable */}
         {profile.mediaUrls.length > 0 && (
           <div>
             <SectionTitle>Gallery</SectionTitle>
             <div className="grid grid-cols-3 gap-1.5 mt-2">
               {profile.mediaUrls.filter(Boolean).map((url, i) => (
-                <div
+                <button
                   key={url || `media-${i}`}
-                  className="aspect-square rounded-xl overflow-hidden"
+                  type="button"
+                  data-ocid={`viewprofile.item.${i + 1}`}
+                  onClick={() => openLightbox(i + 1)}
+                  className="aspect-square rounded-xl overflow-hidden active:scale-95 transition-transform"
                 >
                   <img
                     src={url}
                     alt={`media ${i + 1}`}
                     className="w-full h-full object-cover"
                   />
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -291,6 +313,15 @@ export default function ViewProfilePage({
           <MessageCircle className="w-5 h-5 text-white" />
         </button>
       </div>
+
+      {/* Gallery Lightbox */}
+      {lightboxOpen && allMedia.length > 0 && (
+        <GalleryLightbox
+          images={allMedia}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }

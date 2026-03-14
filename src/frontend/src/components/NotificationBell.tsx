@@ -1,12 +1,11 @@
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Profile } from "../backend";
+import type { Profile, StoryNotification } from "../backend";
 import {
   useMatchRequests,
   useMutualMatches,
   useStoryNotifications,
 } from "../hooks/useQueries";
-import type { StoryNotification } from "../hooks/useQueries";
 import {
   NOTIF_HISTORY_KEY,
   getNotificationHistory,
@@ -106,8 +105,8 @@ function appendToHistory(
 function storyNotifType(
   n: StoryNotification,
 ): "story_like" | "story_comment" | "story_reply" {
-  if ("like" in n.notifType) return "story_like";
-  if ("reply" in n.notifType) return "story_reply";
+  if (n.notifType === "like") return "story_like";
+  if (n.notifType === "reply") return "story_reply";
   return "story_comment";
 }
 
@@ -167,7 +166,9 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     id: `story_${n.id.toString()}`,
     type: storyNotifType(n),
     profileName: n.actorName,
-    profilePhoto: n.actorPhoto[0] ?? undefined,
+    profilePhoto: Array.isArray(n.actorPhoto)
+      ? (n.actorPhoto[0] ?? undefined)
+      : (n.actorPhoto ?? undefined),
     text: n.text,
     timestamp: Number(n.timestamp / 1_000_000n),
   }));

@@ -1,22 +1,19 @@
 import Map "mo:core/Map";
 import Set "mo:core/Set";
-import Array "mo:core/Array";
-import Text "mo:core/Text";
 import List "mo:core/List";
+import Array "mo:core/Array";
+import Iter "mo:core/Iter";
 import Option "mo:core/Option";
 import Runtime "mo:core/Runtime";
-import Iter "mo:core/Iter";
+import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
-
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
-
-
 
 actor {
   let accessControlState = AccessControl.initState();
@@ -35,7 +32,6 @@ actor {
     #hidden;
   };
 
-  // Core stored message type -- unchanged for stable compatibility
   type Message = {
     id : Nat;
     fromUserId : Principal;
@@ -45,7 +41,6 @@ actor {
     read : Bool;
   };
 
-  // Enriched message type returned to clients (includes reaction + isDeleted)
   type MessageWithMeta = {
     id : Nat;
     fromUserId : Principal;
@@ -176,9 +171,8 @@ actor {
   let messages = Map.empty<Principal, List.List<Message>>();
   var nextMessageId = 1;
 
-  // Separate stable stores for reactions and deletes -- avoids Message type migration
-  let messageReactions = Map.empty<Nat, Text>(); // messageId -> emoji
-  let deletedMessageIds = Set.empty<Nat>();      // set of deleted messageIds
+  let messageReactions = Map.empty<Nat, Text>();
+  let deletedMessageIds = Set.empty<Nat>();
 
   let stories = Map.empty<Nat, Story>();
   var nextStoryId = 1;
@@ -187,6 +181,9 @@ actor {
   var nextCommentId = 1;
 
   let storyLikes = Map.empty<Nat, Set.Set<Principal>>();
+  let storyReactions = Map.empty<Nat, Map.Map<Principal, Text>>(); // storyId -> userId -> emoji reaction
+
+  let storyViews = Map.empty<Nat, Set.Set<Principal>>(); // storyId -> viewers
 
   // Story notifications keyed by story owner principal
   let storyNotifications = Map.empty<Principal, List.List<StoryNotification>>();
@@ -218,6 +215,7 @@ actor {
     storyNotifications.add(storyOwnerId, existing);
   };
 
+  // Privacy and premium status functions (unchanged)
   public shared ({ caller }) func setPrivacyVisibility(visibility : PrivacyVisibility) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can set privacy settings");
@@ -260,6 +258,7 @@ actor {
     showLastActiveStatus.get(caller).get(true);
   };
 
+  // Profile management (unchanged)
   public shared ({ caller }) func createOrUpdateProfile(
     name : Text,
     age : Nat,
@@ -363,6 +362,7 @@ actor {
     );
   };
 
+  // Match requests and matching (unchanged)
   public shared ({ caller }) func sendMatchRequest(toUserId : Principal) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can send match requests");
@@ -510,6 +510,7 @@ actor {
     };
   };
 
+  // Messaging and reactions (unchanged)
   public shared ({ caller }) func sendMessage(toUserId : Principal, text : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can send messages");
@@ -540,7 +541,6 @@ actor {
     nextMessageId += 1;
   };
 
-  // Returns messages enriched with reaction and isDeleted, filtering out deleted ones
   public query ({ caller }) func getMessages(withUserId : Principal) : async [MessageWithMeta] {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can view messages");
@@ -573,7 +573,6 @@ actor {
     );
   };
 
-  // React to a message -- persisted in separate map
   public shared ({ caller }) func reactToMessage(messageId : Nat, emoji : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized");
@@ -581,7 +580,6 @@ actor {
     messageReactions.add(messageId, emoji);
   };
 
-  // Edit a message -- only sender can edit; updates stored text in place
   public shared ({ caller }) func editMessage(messageId : Nat, newText : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized");
@@ -624,7 +622,6 @@ actor {
     };
   };
 
-  // Delete a message -- only sender; persisted in separate set
   public shared ({ caller }) func deleteMessage(messageId : Nat) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized");
@@ -646,6 +643,7 @@ actor {
     };
   };
 
+  // Story functions
   public shared ({ caller }) func addStory(imageUrl : Text, caption : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can add stories");
@@ -667,7 +665,143 @@ actor {
 
         stories.add(nextStoryId, story);
         storyLikes.add(nextStoryId, Set.empty<Principal>());
+        storyReactions.add(nextStoryId, Map.empty<Principal, Text>());
+        storyViews.add(nextStoryId, Set.empty<Principal>());
         nextStoryId += 1;
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteStory(storyId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can delete stories");
+    };
+
+    switch (stories.get(storyId)) {
+      case (null) { Runtime.trap("Story not found") };
+      case (?story) {
+        if (story.userId != caller) {
+          Runtime.trap("Unauthorized: You can only delete your own stories");
+        };
+        stories.remove(storyId);
+        storyLikes.remove(storyId);
+        storyReactions.remove(storyId);
+        storyViews.remove(storyId);
+      };
+    };
+  };
+
+  public shared ({ caller }) func adminDeleteStory(storyId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      Runtime.trap("Unauthorized: Only admin can delete stories");
+    };
+    stories.remove(storyId);
+    storyLikes.remove(storyId);
+    storyReactions.remove(storyId);
+    storyViews.remove(storyId);
+  };
+
+  public shared ({ caller }) func addStoryReaction(storyId : Nat, emoji : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can react to stories");
+    };
+
+    switch (storyReactions.get(storyId)) {
+      case (null) {
+        Runtime.trap("Story not found");
+      };
+      case (?reactions) {
+        reactions.add(caller, emoji);
+        storyReactions.add(storyId, reactions);
+      };
+    };
+  };
+
+  public query ({ caller }) func getStoryReactions(storyId : Nat) : async [(Text, Nat)] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view story reactions");
+    };
+
+    switch (storyReactions.get(storyId)) {
+      case (null) {
+        Runtime.trap("Story not found");
+      };
+      case (?reactions) {
+        let emojiCounts = Map.empty<Text, Nat>();
+
+        for ((_, emoji) in reactions.entries()) {
+          let count = emojiCounts.get(emoji).get(0);
+          emojiCounts.add(emoji, count + 1);
+        };
+
+        emojiCounts.toArray();
+      };
+    };
+  };
+
+  public query ({ caller }) func getCallerStoryReaction(storyId : Nat) : async ?Text {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view reactions");
+    };
+
+    switch (storyReactions.get(storyId)) {
+      case (null) { Runtime.trap("Story not found") };
+      case (?reactions) { reactions.get(caller) };
+    };
+  };
+
+  public shared ({ caller }) func recordStoryView(storyId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view stories");
+    };
+
+    switch (storyViews.get(storyId)) {
+      case (null) { Runtime.trap("Story not found") };
+      case (?viewers) {
+        let newViewers = Set.empty<Principal>();
+        for (viewer in viewers.values()) {
+          newViewers.add(viewer);
+        };
+        newViewers.add(caller);
+        storyViews.add(storyId, newViewers);
+      };
+    };
+  };
+
+  public query ({ caller }) func getStoryViewCount(storyId : Nat) : async Nat {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view story view count");
+    };
+    switch (storyViews.get(storyId)) {
+      case (null) { 0 };
+      case (?viewers) { viewers.size() };
+    };
+  };
+
+  public query ({ caller }) func getStoryViewers(storyId : Nat) : async [Profile] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view story viewers");
+    };
+
+    switch (stories.get(storyId)) {
+      case (null) { Runtime.trap("Story not found") };
+      case (?story) {
+        if (story.userId != caller) {
+          Runtime.trap("Unauthorized: You can only view viewers for your own stories");
+        };
+        switch (storyViews.get(storyId)) {
+          case (null) { [] };
+          case (?viewers) {
+            viewers.toArray().map(
+              func(userId) {
+                switch (profiles.get(userId)) {
+                  case (?profile) { profile };
+                  case (null) { Runtime.trap("User not found") };
+                };
+              }
+            );
+          };
+        };
       };
     };
   };
@@ -676,19 +810,7 @@ actor {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can view stories");
     };
-
     stories.values().toArray();
-  };
-
-  public query ({ caller }) func hasLikedStory(storyId : Nat) : async Bool {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can check story likes");
-    };
-
-    switch (storyLikes.get(storyId)) {
-      case (null) { false };
-      case (?likes) { likes.contains(caller) };
-    };
   };
 
   public shared ({ caller }) func likeStory(storyId : Nat) : async () {
@@ -885,6 +1007,7 @@ actor {
     storyNotifications.get(caller).get(List.empty<StoryNotification>()).toArray();
   };
 
+  // Call signal functions (unchanged)
   public shared ({ caller }) func storeCallSignal(toUserId : Principal, signalType : CallSignalType, data : Text, callType : CallType) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can store call signals");
@@ -933,6 +1056,7 @@ actor {
     filteredSignals;
   };
 
+  // Message read/typing/call log functions (unchanged)
   public shared ({ caller }) func markMessageRead(messageId : Nat) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can mark messages as read");
@@ -1043,6 +1167,7 @@ actor {
     resultList.toArray();
   };
 
+  // Admin and special/analytics functions (unchanged)
   public query ({ caller }) func isAdmin() : async Bool {
     AccessControl.isAdmin(accessControlState, caller);
   };
@@ -1073,5 +1198,23 @@ actor {
       }
     );
     requestedProfiles.filter(func((_, count)) { count > 0 });
+  };
+
+  public query ({ caller }) func adminGetAllStories() : async [Story] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      Runtime.trap("Unauthorized: Only admin can view all stories");
+    };
+    stories.values().toArray();
+  };
+
+  public query ({ caller }) func hasLikedStory(storyId : Nat) : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can check story likes");
+    };
+
+    switch (storyLikes.get(storyId)) {
+      case (null) { false };
+      case (?likes) { likes.contains(caller) };
+    };
   };
 };

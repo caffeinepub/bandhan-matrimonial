@@ -19,6 +19,16 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const Story = IDL.Record({
+  'id' : IDL.Nat,
+  'userId' : IDL.Principal,
+  'authorName' : IDL.Text,
+  'authorPhoto' : IDL.Opt(IDL.Text),
+  'imageUrl' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'caption' : IDL.Text,
+  'likesCount' : IDL.Nat,
+});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
@@ -83,23 +93,36 @@ export const CallHistory = IDL.Record({
   'durationSeconds' : IDL.Nat,
   'timestamp' : IDL.Int,
 });
-export const Message = IDL.Record({
+export const MessageWithMeta = IDL.Record({
   'id' : IDL.Nat,
+  'isDeleted' : IDL.Bool,
   'read' : IDL.Bool,
   'text' : IDL.Text,
   'toUserId' : IDL.Principal,
   'fromUserId' : IDL.Principal,
   'timestamp' : IDL.Int,
+  'reaction' : IDL.Opt(IDL.Text),
 });
-export const Story = IDL.Record({
+export const StoryNotifType = IDL.Variant({
+  'like' : IDL.Null,
+  'comment' : IDL.Null,
+  'reply' : IDL.Null,
+});
+export const StoryNotification = IDL.Record({
   'id' : IDL.Nat,
-  'userId' : IDL.Principal,
-  'authorName' : IDL.Text,
-  'authorPhoto' : IDL.Opt(IDL.Text),
-  'imageUrl' : IDL.Text,
+  'actorName' : IDL.Text,
+  'notifType' : StoryNotifType,
+  'storyId' : IDL.Nat,
+  'storyOwnerId' : IDL.Principal,
+  'actorPhoto' : IDL.Opt(IDL.Text),
+  'text' : IDL.Text,
+  'actorUserId' : IDL.Principal,
   'timestamp' : IDL.Int,
-  'caption' : IDL.Text,
-  'likesCount' : IDL.Nat,
+});
+export const PrivacyVisibility = IDL.Variant({
+  'everyone' : IDL.Null,
+  'matchesOnly' : IDL.Null,
+  'hidden' : IDL.Null,
 });
 export const StoryComment = IDL.Record({
   'id' : IDL.Nat,
@@ -142,7 +165,10 @@ export const idlService = IDL.Service({
   'acceptMatchRequest' : IDL.Func([IDL.Principal], [], []),
   'addStory' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'addStoryComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'addStoryReaction' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'adminDeleteProfile' : IDL.Func([IDL.Principal], [], []),
+  'adminDeleteStory' : IDL.Func([IDL.Nat], [], []),
+  'adminGetAllStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'consumeCallSignals' : IDL.Func([IDL.Principal], [IDL.Vec(CallSignal)], []),
   'createOrUpdateProfile' : IDL.Func(
@@ -173,6 +199,9 @@ export const idlService = IDL.Service({
       [],
     ),
   'declineMatchRequest' : IDL.Func([IDL.Principal], [], []),
+  'deleteMessage' : IDL.Func([IDL.Nat], [], []),
+  'deleteStory' : IDL.Func([IDL.Nat], [], []),
+  'editMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'getAllProfiles' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
   'getAllWithRequestedCount' : IDL.Func(
       [],
@@ -182,6 +211,11 @@ export const idlService = IDL.Service({
   'getCallHistory' : IDL.Func(
       [],
       [IDL.Vec(IDL.Tuple(CallHistory, Profile))],
+      ['query'],
+    ),
+  'getCallerStoryReaction' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Opt(IDL.Text)],
       ['query'],
     ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(Profile)], ['query']),
@@ -202,10 +236,29 @@ export const idlService = IDL.Service({
       ],
       ['query'],
     ),
-  'getMessages' : IDL.Func([IDL.Principal], [IDL.Vec(Message)], ['query']),
+  'getMessages' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Vec(MessageWithMeta)],
+      ['query'],
+    ),
   'getMutualMatches' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
+  'getMyStoryNotifications' : IDL.Func(
+      [],
+      [IDL.Vec(StoryNotification)],
+      ['query'],
+    ),
+  'getPremiumStatus' : IDL.Func([], [IDL.Bool], ['query']),
+  'getPrivacyVisibility' : IDL.Func([], [PrivacyVisibility], ['query']),
+  'getShowLastActive' : IDL.Func([], [IDL.Bool], ['query']),
   'getStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
   'getStoryComments' : IDL.Func([IDL.Nat], [IDL.Vec(StoryComment)], ['query']),
+  'getStoryReactions' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
+  'getStoryViewCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
+  'getStoryViewers' : IDL.Func([IDL.Nat], [IDL.Vec(Profile)], ['query']),
   'getTypingStatus' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
   'getUserProfile' : IDL.Func([IDL.Principal], [IDL.Opt(Profile)], ['query']),
   'hasLikedStory' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
@@ -214,10 +267,15 @@ export const idlService = IDL.Service({
   'likeStory' : IDL.Func([IDL.Nat], [], []),
   'logCall' : IDL.Func([IDL.Principal, CallType, IDL.Nat, CallStatus], [], []),
   'markMessageRead' : IDL.Func([IDL.Nat], [], []),
+  'reactToMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'recordStoryView' : IDL.Func([IDL.Nat], [], []),
   'replyToStoryComment' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
   'searchProfiles' : IDL.Func([IDL.Text], [IDL.Vec(Profile)], ['query']),
   'sendMatchRequest' : IDL.Func([IDL.Principal], [], []),
   'sendMessage' : IDL.Func([IDL.Principal, IDL.Text], [], []),
+  'setPremiumStatus' : IDL.Func([IDL.Bool], [], []),
+  'setPrivacyVisibility' : IDL.Func([PrivacyVisibility], [], []),
+  'setShowLastActive' : IDL.Func([IDL.Bool], [], []),
   'setTyping' : IDL.Func([IDL.Principal, IDL.Bool], [], []),
   'storeCallSignal' : IDL.Func(
       [IDL.Principal, CallSignalType, IDL.Text, CallType],
@@ -240,6 +298,16 @@ export const idlFactory = ({ IDL }) => {
   const _CaffeineStorageRefillResult = IDL.Record({
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const Story = IDL.Record({
+    'id' : IDL.Nat,
+    'userId' : IDL.Principal,
+    'authorName' : IDL.Text,
+    'authorPhoto' : IDL.Opt(IDL.Text),
+    'imageUrl' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'caption' : IDL.Text,
+    'likesCount' : IDL.Nat,
   });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
@@ -305,23 +373,36 @@ export const idlFactory = ({ IDL }) => {
     'durationSeconds' : IDL.Nat,
     'timestamp' : IDL.Int,
   });
-  const Message = IDL.Record({
+  const MessageWithMeta = IDL.Record({
     'id' : IDL.Nat,
+    'isDeleted' : IDL.Bool,
     'read' : IDL.Bool,
     'text' : IDL.Text,
     'toUserId' : IDL.Principal,
     'fromUserId' : IDL.Principal,
     'timestamp' : IDL.Int,
+    'reaction' : IDL.Opt(IDL.Text),
   });
-  const Story = IDL.Record({
+  const StoryNotifType = IDL.Variant({
+    'like' : IDL.Null,
+    'comment' : IDL.Null,
+    'reply' : IDL.Null,
+  });
+  const StoryNotification = IDL.Record({
     'id' : IDL.Nat,
-    'userId' : IDL.Principal,
-    'authorName' : IDL.Text,
-    'authorPhoto' : IDL.Opt(IDL.Text),
-    'imageUrl' : IDL.Text,
+    'actorName' : IDL.Text,
+    'notifType' : StoryNotifType,
+    'storyId' : IDL.Nat,
+    'storyOwnerId' : IDL.Principal,
+    'actorPhoto' : IDL.Opt(IDL.Text),
+    'text' : IDL.Text,
+    'actorUserId' : IDL.Principal,
     'timestamp' : IDL.Int,
-    'caption' : IDL.Text,
-    'likesCount' : IDL.Nat,
+  });
+  const PrivacyVisibility = IDL.Variant({
+    'everyone' : IDL.Null,
+    'matchesOnly' : IDL.Null,
+    'hidden' : IDL.Null,
   });
   const StoryComment = IDL.Record({
     'id' : IDL.Nat,
@@ -364,7 +445,10 @@ export const idlFactory = ({ IDL }) => {
     'acceptMatchRequest' : IDL.Func([IDL.Principal], [], []),
     'addStory' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'addStoryComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'addStoryReaction' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'adminDeleteProfile' : IDL.Func([IDL.Principal], [], []),
+    'adminDeleteStory' : IDL.Func([IDL.Nat], [], []),
+    'adminGetAllStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'consumeCallSignals' : IDL.Func([IDL.Principal], [IDL.Vec(CallSignal)], []),
     'createOrUpdateProfile' : IDL.Func(
@@ -395,6 +479,9 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'declineMatchRequest' : IDL.Func([IDL.Principal], [], []),
+    'deleteMessage' : IDL.Func([IDL.Nat], [], []),
+    'deleteStory' : IDL.Func([IDL.Nat], [], []),
+    'editMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'getAllProfiles' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
     'getAllWithRequestedCount' : IDL.Func(
         [],
@@ -404,6 +491,11 @@ export const idlFactory = ({ IDL }) => {
     'getCallHistory' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(CallHistory, Profile))],
+        ['query'],
+      ),
+    'getCallerStoryReaction' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Opt(IDL.Text)],
         ['query'],
       ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(Profile)], ['query']),
@@ -424,14 +516,33 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
-    'getMessages' : IDL.Func([IDL.Principal], [IDL.Vec(Message)], ['query']),
+    'getMessages' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Vec(MessageWithMeta)],
+        ['query'],
+      ),
     'getMutualMatches' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
+    'getMyStoryNotifications' : IDL.Func(
+        [],
+        [IDL.Vec(StoryNotification)],
+        ['query'],
+      ),
+    'getPremiumStatus' : IDL.Func([], [IDL.Bool], ['query']),
+    'getPrivacyVisibility' : IDL.Func([], [PrivacyVisibility], ['query']),
+    'getShowLastActive' : IDL.Func([], [IDL.Bool], ['query']),
     'getStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
     'getStoryComments' : IDL.Func(
         [IDL.Nat],
         [IDL.Vec(StoryComment)],
         ['query'],
       ),
+    'getStoryReactions' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
+    'getStoryViewCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
+    'getStoryViewers' : IDL.Func([IDL.Nat], [IDL.Vec(Profile)], ['query']),
     'getTypingStatus' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
     'getUserProfile' : IDL.Func([IDL.Principal], [IDL.Opt(Profile)], ['query']),
     'hasLikedStory' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
@@ -444,10 +555,15 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'markMessageRead' : IDL.Func([IDL.Nat], [], []),
+    'reactToMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'recordStoryView' : IDL.Func([IDL.Nat], [], []),
     'replyToStoryComment' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
     'searchProfiles' : IDL.Func([IDL.Text], [IDL.Vec(Profile)], ['query']),
     'sendMatchRequest' : IDL.Func([IDL.Principal], [], []),
     'sendMessage' : IDL.Func([IDL.Principal, IDL.Text], [], []),
+    'setPremiumStatus' : IDL.Func([IDL.Bool], [], []),
+    'setPrivacyVisibility' : IDL.Func([PrivacyVisibility], [], []),
+    'setShowLastActive' : IDL.Func([IDL.Bool], [], []),
     'setTyping' : IDL.Func([IDL.Principal, IDL.Bool], [], []),
     'storeCallSignal' : IDL.Func(
         [IDL.Principal, CallSignalType, IDL.Text, CallType],

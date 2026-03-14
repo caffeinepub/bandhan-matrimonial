@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Message, Profile } from "../backend";
+import type { MessageWithMeta, Profile } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useDeleteMessage,
@@ -26,7 +26,7 @@ import {
 } from "../hooks/useQueries";
 
 // Extended message type with fields added in backend version 9
-type ExtMessage = Message & { reaction?: string; isDeleted?: boolean };
+type ExtMessage = MessageWithMeta;
 
 interface Props {
   profile: Profile;

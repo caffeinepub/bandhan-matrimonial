@@ -7,6 +7,13 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export interface CallHistory {
+    status: CallStatus;
+    withUserId: Principal;
+    callType: CallType;
+    durationSeconds: bigint;
+    timestamp: bigint;
+}
 export interface Story {
     id: bigint;
     userId: Principal;
@@ -16,15 +23,6 @@ export interface Story {
     timestamp: bigint;
     caption: string;
     likesCount: bigint;
-}
-export interface CallSignal {
-    id: bigint;
-    data: string;
-    toUserId: Principal;
-    callType: CallType;
-    fromUserId: Principal;
-    timestamp: bigint;
-    signalType: CallSignalType;
 }
 export interface Profile {
     age: bigint;
@@ -51,6 +49,15 @@ export interface Profile {
     location: string;
     hobbies: Array<string>;
 }
+export interface CallSignal {
+    id: bigint;
+    data: string;
+    toUserId: Principal;
+    callType: CallType;
+    fromUserId: Principal;
+    timestamp: bigint;
+    signalType: CallSignalType;
+}
 export interface StoryComment {
     id: bigint;
     parentCommentId?: bigint;
@@ -60,22 +67,26 @@ export interface StoryComment {
     authorName: string;
     timestamp: bigint;
 }
-export interface Message {
+export interface StoryNotification {
     id: bigint;
+    actorName: string;
+    notifType: StoryNotifType;
+    storyId: bigint;
+    storyOwnerId: Principal;
+    actorPhoto?: string;
+    text: string;
+    actorUserId: Principal;
+    timestamp: bigint;
+}
+export interface MessageWithMeta {
+    id: bigint;
+    isDeleted: boolean;
     read: boolean;
     text: string;
     toUserId: Principal;
     fromUserId: Principal;
     timestamp: bigint;
     reaction?: string;
-    isDeleted: boolean;
-}
-export interface CallHistory {
-    status: CallStatus;
-    withUserId: Principal;
-    callType: CallType;
-    durationSeconds: bigint;
-    timestamp: bigint;
 }
 export enum CallSignalType {
     iceCandidate = "iceCandidate",
@@ -98,6 +109,16 @@ export enum Gender {
     female = "female",
     male = "male"
 }
+export enum PrivacyVisibility {
+    everyone = "everyone",
+    matchesOnly = "matchesOnly",
+    hidden = "hidden"
+}
+export enum StoryNotifType {
+    like = "like",
+    comment = "comment",
+    reply = "reply"
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
@@ -108,33 +129,39 @@ export enum Variant_pending_accepted_declined {
     accepted = "accepted",
     declined = "declined"
 }
-export enum PrivacyVisibility {
-    everyone = "everyone",
-    matchesOnly = "matchesOnly",
-    hidden = "hidden"
-}
 export interface backendInterface {
     acceptMatchRequest(fromUserId: Principal): Promise<void>;
     addStory(imageUrl: string, caption: string): Promise<void>;
     addStoryComment(storyId: bigint, text: string): Promise<void>;
+    addStoryReaction(storyId: bigint, emoji: string): Promise<void>;
     adminDeleteProfile(profileId: Principal): Promise<void>;
+    adminDeleteStory(storyId: bigint): Promise<void>;
+    adminGetAllStories(): Promise<Array<Story>>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     consumeCallSignals(fromUserId: Principal): Promise<Array<CallSignal>>;
     createOrUpdateProfile(name: string, age: bigint, gender: Gender, religion: string, location: string, bio: string, photoUrl: string | null, occupation: string, height: string, motherTongue: string, maritalStatus: string, interests: Array<string>, hobbies: Array<string>, education: string, favoriteMovies: Array<string>, favoriteSongs: Array<string>, thoughts: string, mood: string, mediaUrls: Array<string>, aboutMe: string, phone: string | null): Promise<void>;
     declineMatchRequest(fromUserId: Principal): Promise<void>;
     deleteMessage(messageId: bigint): Promise<void>;
+    deleteStory(storyId: bigint): Promise<void>;
     editMessage(messageId: bigint, newText: string): Promise<void>;
     getAllProfiles(): Promise<Array<Profile>>;
     getAllWithRequestedCount(): Promise<Array<[Profile, bigint]>>;
     getCallHistory(): Promise<Array<[CallHistory, Profile]>>;
+    getCallerStoryReaction(storyId: bigint): Promise<string | null>;
     getCallerUserProfile(): Promise<Profile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getMatchRequests(): Promise<Array<[Profile, Variant_pending_accepted_declined]>>;
-    getMessages(withUserId: Principal): Promise<Array<Message>>;
+    getMessages(withUserId: Principal): Promise<Array<MessageWithMeta>>;
     getMutualMatches(): Promise<Array<Profile>>;
+    getMyStoryNotifications(): Promise<Array<StoryNotification>>;
+    getPremiumStatus(): Promise<boolean>;
     getPrivacyVisibility(): Promise<PrivacyVisibility>;
+    getShowLastActive(): Promise<boolean>;
     getStories(): Promise<Array<Story>>;
     getStoryComments(storyId: bigint): Promise<Array<StoryComment>>;
+    getStoryReactions(storyId: bigint): Promise<Array<[string, bigint]>>;
+    getStoryViewCount(storyId: bigint): Promise<bigint>;
+    getStoryViewers(storyId: bigint): Promise<Array<Profile>>;
     getTypingStatus(fromUserId: Principal): Promise<boolean>;
     getUserProfile(userId: Principal): Promise<Profile | null>;
     hasLikedStory(storyId: bigint): Promise<boolean>;
@@ -144,11 +171,14 @@ export interface backendInterface {
     logCall(withUserId: Principal, callType: CallType, durationSeconds: bigint, status: CallStatus): Promise<void>;
     markMessageRead(messageId: bigint): Promise<void>;
     reactToMessage(messageId: bigint, emoji: string): Promise<void>;
+    recordStoryView(storyId: bigint): Promise<void>;
     replyToStoryComment(storyId: bigint, parentCommentId: bigint, text: string): Promise<void>;
     searchProfiles(term: string): Promise<Array<Profile>>;
     sendMatchRequest(toUserId: Principal): Promise<void>;
     sendMessage(toUserId: Principal, text: string): Promise<void>;
+    setPremiumStatus(isPremium: boolean): Promise<void>;
     setPrivacyVisibility(visibility: PrivacyVisibility): Promise<void>;
+    setShowLastActive(show: boolean): Promise<void>;
     setTyping(toUserId: Principal, isTyping: boolean): Promise<void>;
     storeCallSignal(toUserId: Principal, signalType: CallSignalType, data: string, callType: CallType): Promise<void>;
     unlikeStory(storyId: bigint): Promise<void>;

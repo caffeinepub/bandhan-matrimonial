@@ -1,7 +1,24 @@
 import { Input } from "@/components/ui/input";
-import { Heart, Search, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Heart, Search, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
 import type { Profile } from "../backend";
+import NotificationBell from "../components/NotificationBell";
 import {
   useAllProfiles,
   useCallerProfile,
@@ -9,9 +26,33 @@ import {
 } from "../hooks/useQueries";
 import { playMatchSentSound } from "../hooks/useSound";
 
-interface Props {
-  onViewProfile: (p: Profile) => void;
+interface Filters {
+  name: string;
+  city: string;
+  nearMe: boolean;
+  skills: string;
+  qualification: string;
+  skinColor: string;
+  heightMin: string;
+  heightMax: string;
+  weightMin: string;
+  weightMax: string;
+  employment: "any" | "employed" | "jobless";
 }
+
+const defaultFilters: Filters = {
+  name: "",
+  city: "",
+  nearMe: false,
+  skills: "",
+  qualification: "",
+  skinColor: "",
+  heightMin: "",
+  heightMax: "",
+  weightMin: "",
+  weightMax: "",
+  employment: "any",
+};
 
 // Deterministically marks first ~30% of profiles as premium based on name hash
 function isPremiumProfile(p: Profile): boolean {
@@ -22,30 +63,141 @@ function isPremiumProfile(p: Profile): boolean {
   return hash % 3 === 0;
 }
 
-export default function BrowsePage({ onViewProfile }: Props) {
+function applyFilters(
+  profiles: Profile[],
+  searchTerm: string,
+  filters: Filters,
+): Profile[] {
+  return profiles.filter((p) => {
+    // Search term
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      const match =
+        p.name.toLowerCase().includes(s) ||
+        p.location.toLowerCase().includes(s) ||
+        p.religion.toLowerCase().includes(s);
+      if (!match) return false;
+    }
+    // Name filter
+    if (
+      filters.name &&
+      !p.name.toLowerCase().includes(filters.name.toLowerCase())
+    )
+      return false;
+    // City filter
+    if (
+      filters.city &&
+      !p.location.toLowerCase().includes(filters.city.toLowerCase())
+    )
+      return false;
+    // Near me — filter by detected city
+    if (filters.nearMe) {
+      const dc = (filters as Filters & { _detectedCity?: string })
+        ._detectedCity;
+      if (dc) {
+        if (!p.location.toLowerCase().includes(dc.toLowerCase())) return false;
+      } else if (!p.location) return false;
+    }
+    // Skills (check bio/occupation/interests)
+    if (filters.skills) {
+      const sk = filters.skills.toLowerCase();
+      const hasSkill =
+        p.bio.toLowerCase().includes(sk) ||
+        p.occupation.toLowerCase().includes(sk) ||
+        p.interests.some((i) => i.toLowerCase().includes(sk)) ||
+        p.hobbies.some((h) => h.toLowerCase().includes(sk));
+      if (!hasSkill) return false;
+    }
+    // Qualification
+    if (filters.qualification && p.education) {
+      if (
+        !p.education.toLowerCase().includes(filters.qualification.toLowerCase())
+      )
+        return false;
+    }
+    // Employment
+    if (filters.employment !== "any" && p.occupation) {
+      const hasJob = p.occupation.trim().length > 0;
+      if (filters.employment === "employed" && !hasJob) return false;
+      if (filters.employment === "jobless" && hasJob) return false;
+    }
+    return true;
+  });
+}
+
+interface Props {
+  onViewProfile: (p: Profile) => void;
+  onNotifications: () => void;
+}
+
+export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
   const { data: allProfiles = [], isLoading } = useAllProfiles();
   const { data: myProfile } = useCallerProfile();
   const sendRequest = useSendMatchRequest();
   const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [pendingFilters, setPendingFilters] = useState<Filters>(defaultFilters);
 
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [detectedCity, setDetectedCity] = useState<string | null>(null);
+  const [nearMeLoading, setNearMeLoading] = useState(false);
+  const [nearMeError, setNearMeError] = useState<string | null>(null);
+
+  const handleNearMeToggle = async (value: boolean) => {
+    if (!value) {
+      setDetectedCity(null);
+      setNearMeError(null);
+      setPendingFilters(
+        (f) => ({ ...f, nearMe: false, _detectedCity: undefined }) as Filters,
+      );
+      return;
+    }
+    setNearMeLoading(true);
+    setNearMeError(null);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 10000,
+        }),
+      );
+      const { latitude, longitude } = pos.coords;
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+        { headers: { "Accept-Language": "en" } },
+      );
+      const data = await res.json();
+      const city =
+        data.address?.city ||
+        data.address?.town ||
+        data.address?.village ||
+        data.address?.county ||
+        "";
+      setDetectedCity(city);
+      setPendingFilters(
+        (f) => ({ ...f, nearMe: true, _detectedCity: city }) as Filters,
+      );
+    } catch (err) {
+      const isPermDenied = (err as { code?: number })?.code === 1;
+      const msg = isPermDenied
+        ? "Location permission denied. Please allow location access."
+        : "Could not detect your location. Please try again.";
+      setNearMeError(msg);
+      setPendingFilters((f) => ({ ...f, nearMe: false }));
+    } finally {
+      setNearMeLoading(false);
+    }
+  };
 
   const myId = myProfile?.userId.toString();
-  const filtered = allProfiles.filter((p) => {
+  const visible = allProfiles.filter((p) => {
     if (p.userId.toString() === myId) return false;
     if (liked.has(p.userId.toString()) || skipped.has(p.userId.toString()))
       return false;
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(s) ||
-        p.location.toLowerCase().includes(s) ||
-        p.religion.toLowerCase().includes(s)
-      );
-    }
     return true;
   });
+  const filtered = applyFilters(visible, searchTerm, filters);
 
   const currentProfile = filtered[0];
 
@@ -61,9 +213,35 @@ export default function BrowsePage({ onViewProfile }: Props) {
     setSkipped((prev) => new Set([...prev, p.userId.toString()]));
   };
 
+  const openFilter = () => {
+    setPendingFilters(filters);
+    setFilterOpen(true);
+  };
+
+  const applyFilter = () => {
+    const f = { ...pendingFilters };
+    if (f.nearMe && detectedCity) {
+      (f as Filters & { _detectedCity?: string })._detectedCity = detectedCity;
+    }
+    setFilters(f);
+    setFilterOpen(false);
+  };
+
+  const resetFilter = () => {
+    setPendingFilters(defaultFilters);
+    setFilters(defaultFilters);
+    setFilterOpen(false);
+  };
+
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) => {
+    if (k === "nearMe") return v === true;
+    if (k === "employment") return v !== "any";
+    return v !== "";
+  });
+
   return (
     <div className="min-h-screen pb-4" style={{ background: "#0a0010" }}>
-      {/* Auto-scroll keyframe */}
+      {/* Keyframes */}
       <style>{`
         @keyframes scroll-rtl {
           0% { transform: translateX(0); }
@@ -76,39 +254,403 @@ export default function BrowsePage({ onViewProfile }: Props) {
         .browse-scroll-track:active {
           animation-play-state: paused;
         }
+        @keyframes discover-shimmer {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .discover-text {
+          background: linear-gradient(270deg, #e11d48, #f43f5e, #ec4899, #a855f7, #7c3aed, #e11d48);
+          background-size: 300% 300%;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: discover-shimmer 3s ease infinite;
+        }
       `}</style>
 
-      <div className="px-5 pt-14 pb-3 flex items-center justify-between">
+      {/* Header row: Discover + Bell + Ring icon */}
+      <div className="px-5 pt-12 pb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Discover</h1>
+          <h1 className="text-2xl font-bold discover-text">Discover</h1>
           <p className="text-white/50 text-xs mt-0.5">
             {filtered.length} people nearby
           </p>
         </div>
-        <div
-          className="w-9 h-9 rounded-full flex items-center justify-center"
-          style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
-        >
-          <span className="text-white text-lg">💍</span>
+        <div className="flex items-center gap-2">
+          <NotificationBell onViewAll={onNotifications} />
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+          >
+            <span className="text-white text-lg">💍</span>
+          </div>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-5 mb-4 relative">
-        <Search className="absolute left-8 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-        <Input
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search by name, location..."
-          data-ocid="browse.search_input"
-          className="pl-10 h-10 rounded-2xl text-sm"
+      {/* Search + Filter row */}
+      <div className="px-5 mb-4 flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          <Input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name, location..."
+            data-ocid="browse.search_input"
+            className="pl-10 h-10 rounded-2xl text-sm"
+            style={{
+              background: "oklch(0.15 0.05 300)",
+              border: "1px solid oklch(0.25 0.06 300)",
+              color: "white",
+            }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={openFilter}
+          data-ocid="browse.toggle"
+          className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 relative transition-all active:scale-95"
           style={{
-            background: "oklch(0.15 0.05 300)",
-            border: "1px solid oklch(0.25 0.06 300)",
+            background: hasActiveFilters
+              ? "linear-gradient(135deg,#e11d48,#7c3aed)"
+              : "oklch(0.15 0.05 300)",
+            border: `1px solid ${hasActiveFilters ? "transparent" : "oklch(0.25 0.06 300)"}`,
+          }}
+        >
+          <SlidersHorizontal className="w-4 h-4 text-white" />
+          {hasActiveFilters && (
+            <span
+              className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
+              style={{ background: "#e11d48" }}
+            />
+          )}
+        </button>
+      </div>
+
+      {/* Filter Sheet */}
+      <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+        <SheetContent
+          side="bottom"
+          data-ocid="browse.sheet"
+          className="rounded-t-3xl px-5 py-6 overflow-y-auto"
+          style={{
+            background: "oklch(0.11 0.05 300)",
+            border: "none",
+            maxHeight: "85vh",
             color: "white",
           }}
-        />
-      </div>
+        >
+          <SheetHeader className="mb-5">
+            <SheetTitle className="text-white text-lg font-bold">
+              Filter Profiles
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-4">
+            {/* Name */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">Name</Label>
+              <Input
+                value={pendingFilters.name}
+                onChange={(e) =>
+                  setPendingFilters((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="Search by name..."
+                data-ocid="browse.input"
+                className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                style={{
+                  background: "oklch(0.17 0.06 300)",
+                  border: "1px solid oklch(0.28 0.06 300)",
+                }}
+              />
+            </div>
+
+            {/* City */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">City</Label>
+              <Input
+                value={pendingFilters.city}
+                onChange={(e) =>
+                  setPendingFilters((f) => ({ ...f, city: e.target.value }))
+                }
+                placeholder="e.g. Mumbai, Delhi..."
+                data-ocid="browse.input"
+                className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                style={{
+                  background: "oklch(0.17 0.06 300)",
+                  border: "1px solid oklch(0.28 0.06 300)",
+                }}
+              />
+            </div>
+
+            {/* Near Me */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-white/80 text-sm">Near Me</Label>
+                <Switch
+                  checked={pendingFilters.nearMe}
+                  onCheckedChange={handleNearMeToggle}
+                  disabled={nearMeLoading}
+                  data-ocid="browse.switch"
+                />
+              </div>
+              {nearMeLoading && (
+                <p
+                  data-ocid="browse.loading_state"
+                  className="text-xs"
+                  style={{ color: "#a78bfa" }}
+                >
+                  📍 Detecting your location…
+                </p>
+              )}
+              {nearMeError && (
+                <p
+                  data-ocid="browse.error_state"
+                  className="text-xs"
+                  style={{ color: "#fb7185" }}
+                >
+                  {nearMeError}
+                </p>
+              )}
+              {detectedCity && pendingFilters.nearMe && (
+                <p
+                  data-ocid="browse.success_state"
+                  className="text-xs"
+                  style={{ color: "#4ade80" }}
+                >
+                  📍 Filtering by: {detectedCity}
+                </p>
+              )}
+            </div>
+
+            {/* Skills */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">
+                Skills / Interests
+              </Label>
+              <Input
+                value={pendingFilters.skills}
+                onChange={(e) =>
+                  setPendingFilters((f) => ({ ...f, skills: e.target.value }))
+                }
+                placeholder="e.g. Cooking, Music..."
+                data-ocid="browse.input"
+                className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                style={{
+                  background: "oklch(0.17 0.06 300)",
+                  border: "1px solid oklch(0.28 0.06 300)",
+                }}
+              />
+            </div>
+
+            {/* Qualification */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">
+                Qualification
+              </Label>
+              <Input
+                value={pendingFilters.qualification}
+                onChange={(e) =>
+                  setPendingFilters((f) => ({
+                    ...f,
+                    qualification: e.target.value,
+                  }))
+                }
+                placeholder="e.g. B.Tech, MBA..."
+                data-ocid="browse.input"
+                className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                style={{
+                  background: "oklch(0.17 0.06 300)",
+                  border: "1px solid oklch(0.28 0.06 300)",
+                }}
+              />
+            </div>
+
+            {/* Skin Color */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">
+                Skin Color
+              </Label>
+              <Select
+                value={pendingFilters.skinColor || "any"}
+                onValueChange={(v) =>
+                  setPendingFilters((f) => ({
+                    ...f,
+                    skinColor: v === "any" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  data-ocid="browse.select"
+                  className="h-10 rounded-xl text-sm text-white"
+                  style={{
+                    background: "oklch(0.17 0.06 300)",
+                    border: "1px solid oklch(0.28 0.06 300)",
+                  }}
+                >
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent style={{ background: "oklch(0.17 0.06 300)" }}>
+                  <SelectItem value="any">Any</SelectItem>
+                  <SelectItem value="Fair">Fair</SelectItem>
+                  <SelectItem value="Wheatish">Wheatish</SelectItem>
+                  <SelectItem value="Brown">Brown</SelectItem>
+                  <SelectItem value="Dark">Dark</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Height */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">
+                Height (cm)
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  value={pendingFilters.heightMin}
+                  onChange={(e) =>
+                    setPendingFilters((f) => ({
+                      ...f,
+                      heightMin: e.target.value,
+                    }))
+                  }
+                  placeholder="Min"
+                  data-ocid="browse.input"
+                  className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                  style={{
+                    background: "oklch(0.17 0.06 300)",
+                    border: "1px solid oklch(0.28 0.06 300)",
+                  }}
+                />
+                <Input
+                  type="number"
+                  value={pendingFilters.heightMax}
+                  onChange={(e) =>
+                    setPendingFilters((f) => ({
+                      ...f,
+                      heightMax: e.target.value,
+                    }))
+                  }
+                  placeholder="Max"
+                  data-ocid="browse.input"
+                  className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                  style={{
+                    background: "oklch(0.17 0.06 300)",
+                    border: "1px solid oklch(0.28 0.06 300)",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Weight */}
+            <div>
+              <Label className="text-white/70 text-xs mb-1.5 block">
+                Weight (kg)
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  value={pendingFilters.weightMin}
+                  onChange={(e) =>
+                    setPendingFilters((f) => ({
+                      ...f,
+                      weightMin: e.target.value,
+                    }))
+                  }
+                  placeholder="Min"
+                  data-ocid="browse.input"
+                  className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                  style={{
+                    background: "oklch(0.17 0.06 300)",
+                    border: "1px solid oklch(0.28 0.06 300)",
+                  }}
+                />
+                <Input
+                  type="number"
+                  value={pendingFilters.weightMax}
+                  onChange={(e) =>
+                    setPendingFilters((f) => ({
+                      ...f,
+                      weightMax: e.target.value,
+                    }))
+                  }
+                  placeholder="Max"
+                  data-ocid="browse.input"
+                  className="h-10 rounded-xl text-sm text-white placeholder:text-white/30"
+                  style={{
+                    background: "oklch(0.17 0.06 300)",
+                    border: "1px solid oklch(0.28 0.06 300)",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Employment */}
+            <div>
+              <Label className="text-white/70 text-xs mb-2 block">
+                Employment Status
+              </Label>
+              <RadioGroup
+                value={pendingFilters.employment}
+                onValueChange={(v) =>
+                  setPendingFilters((f) => ({
+                    ...f,
+                    employment: v as Filters["employment"],
+                  }))
+                }
+                className="flex gap-4"
+              >
+                {(["any", "employed", "jobless"] as const).map((val) => (
+                  <div key={val} className="flex items-center gap-2">
+                    <RadioGroupItem
+                      value={val}
+                      id={`emp-${val}`}
+                      data-ocid="browse.radio"
+                      className="border-white/40"
+                    />
+                    <Label
+                      htmlFor={`emp-${val}`}
+                      className="text-white/80 text-sm capitalize"
+                    >
+                      {val === "any"
+                        ? "Any"
+                        : val === "employed"
+                          ? "Employed"
+                          : "Jobless"}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={resetFilter}
+              data-ocid="browse.cancel_button"
+              className="flex-1 h-11 rounded-2xl text-white/70 font-medium text-sm border"
+              style={{
+                borderColor: "oklch(0.3 0.06 300)",
+                background: "transparent",
+              }}
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              onClick={applyFilter}
+              data-ocid="browse.primary_button"
+              className="flex-1 h-11 rounded-2xl text-white font-semibold text-sm"
+              style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+            >
+              Apply Filters
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {isLoading && (
         <div
@@ -266,7 +808,6 @@ export default function BrowsePage({ onViewProfile }: Props) {
               <p className="text-white/50 text-xs uppercase tracking-wider mb-3">
                 More Profiles
               </p>
-              {/* Overflow container */}
               <div
                 className="overflow-hidden"
                 style={{
@@ -274,7 +815,6 @@ export default function BrowsePage({ onViewProfile }: Props) {
                     "linear-gradient(to right,transparent,black 8%,black 92%,transparent)",
                 }}
               >
-                {/* Scrolling track — duplicated for seamless loop */}
                 <div
                   className="browse-scroll-track flex gap-2"
                   style={{ width: "max-content" }}

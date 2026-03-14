@@ -1,30 +1,26 @@
 # Bandhan Matrimonial
 
 ## Current State
-Notification system is localStorage-based for match requests and mutual matches. The NotificationHistoryPage has tabs: All / Match Requests / Matches. The backend already stores story likes, comments, and replies but does not track notifications for story owners.
+Version 17 is live with story highlights, gallery lightbox, Discover header row, search+filter sheet, who-liked viewer, and all previous features.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Backend `StoryNotification` type with fields: id, storyId, storyOwnerId, actorUserId, actorName, actorPhoto, notifType (#like | #comment | #reply), text, timestamp
-- Backend `storyNotifications` map and `nextStoryNotifId` counter
-- Backend `getMyStoryNotifications` query -- returns all story notifications for the caller (as story owner)
-- Story interactions (`likeStory`, `addStoryComment`, `replyToStoryComment`) now push a notification to the story owner's list
-- Frontend hook `useStoryNotifications` calling `getMyStoryNotifications`
-- "Stories" tab in `NotificationHistoryPage` (tabs: All / Match Requests / Matches / Stories)
-- Story notifications shown with emoji: ❤️ for like, 💬 for comment, 💬 for reply
-- `NotificationBell` polls and shows story notifications in dropdown and unread badge count
+- Story music overlay: music note icon in story creator/viewer, user can pick from a short list of moods/tracks (simulated, no real audio streaming)
+- Story sticker overlays: sticker picker in story creator (emoji stickers placed on story), rendered on story viewer
+- Wire "Near Me" filter to browser Geolocation API: when user taps Near Me, request location permission and filter profiles by city match (approximate, based on stored city vs detected city name)
+- Footer copyright: "© 2026. I would ❤️ using Bandhan"
 
 ### Modify
-- `StoredNotification.type` extended to include `"story_like" | "story_comment" | "story_reply"`
-- `NotificationBell` fetches story notifications and merges into display list
-- `NotificationHistoryPage` adds Stories filter tab and correct empty state text
+- Notification bell icon: visible ONLY on the Browse/Discover screen (remove from other screens where it may appear)
+- Footer: replace "© 2026. Built with ❤️ using caffeine.ai" with "© 2026. I would ❤️ using Bandhan"
 
 ### Remove
-- Nothing removed
+- "© 2026. Built with ❤️ using caffeine.ai" text wherever it appears
 
 ## Implementation Plan
-1. Update `src/backend/main.mo`: add StoryNotification type, storage map, counter, getMyStoryNotifications query, and push notifications inside likeStory/addStoryComment/replyToStoryComment
-2. Regenerate `backend.d.ts` bindings
-3. Update `NotificationHistoryPage.tsx`: extend StoredNotification type, add Stories tab
-4. Update `NotificationBell.tsx`: add useStoryNotifications hook call, merge story notifs into display and badge count
+1. Find all footer/copyright text and replace with new string
+2. Audit all screens -- notification bell must only render on Browse screen
+3. Story creator: add sticker picker (emoji grid) and music label picker (mood list), save selections with story data
+4. Story viewer: render sticker overlays and music badge on story
+5. Near Me filter: call navigator.geolocation, reverse-geocode to city name (via nominatim or approximate), filter profiles whose city matches

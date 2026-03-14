@@ -8,7 +8,6 @@ import {
   IncomingCallOverlay,
   useIncomingCallPoller,
 } from "./components/IncomingCallOverlay";
-import NotificationBell from "./components/NotificationBell";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import {
   useCallerProfile,
@@ -253,19 +252,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Floating header bar with notification bell */}
-      <div
-        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-end px-4 pt-3 pb-2 pointer-events-none"
-        style={{
-          background:
-            "linear-gradient(to bottom, rgba(10,0,16,0.85) 0%, transparent 100%)",
-        }}
-      >
-        <div className="pointer-events-auto flex items-center gap-2">
-          <NotificationBell onViewAll={() => setCurrentPage("notifications")} />
-        </div>
-      </div>
-
       <main className="flex-1 pb-20">
         {currentPage === "browse" && (
           <BrowsePage
@@ -273,6 +259,7 @@ export default function App() {
               setSelectedProfile(p);
               setCurrentPage("viewProfile");
             }}
+            onNotifications={() => setCurrentPage("notifications")}
           />
         )}
         {currentPage === "requests" && <RequestsPage />}

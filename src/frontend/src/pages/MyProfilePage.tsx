@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Gender } from "../backend";
+import GalleryLightbox from "../components/GalleryLightbox";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useCallerProfile,
@@ -97,6 +98,8 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
   const { clear: logout } = useInternetIdentity();
   const { uploadFile, uploading } = useStorageUpload();
   const [editing, setEditing] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const photoFileRef = useRef<HTMLInputElement>(null);
   const mediaFileRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -700,16 +703,22 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
                 </p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {allMedia.slice(1).map((url, i) => (
-                    <div
+                    <button
                       key={url || `gal-${i}`}
-                      className="aspect-square rounded-xl overflow-hidden"
+                      type="button"
+                      data-ocid={`myprofile.item.${i + 1}`}
+                      onClick={() => {
+                        setLightboxIndex(i + 1);
+                        setLightboxOpen(true);
+                      }}
+                      className="aspect-square rounded-xl overflow-hidden active:scale-95 transition-transform"
                     >
                       <img
                         src={url}
                         alt=""
                         className="w-full h-full object-cover"
                       />
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1011,6 +1020,13 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
           </>
         )}
       </div>
+      {lightboxOpen && allMedia.length > 0 && (
+        <GalleryLightbox
+          images={allMedia}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }

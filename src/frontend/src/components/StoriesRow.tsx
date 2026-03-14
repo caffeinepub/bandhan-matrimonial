@@ -1,9 +1,33 @@
-import { Image, Plus, Video, X } from "lucide-react";
+import { Image, Music, Plus, Smile, Video, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRef, useState } from "react";
 import { useAddStory, useStories } from "../hooks/useQueries";
 import { useStorageUpload } from "../hooks/useStorageUpload";
 import StoryViewerModal from "./StoryViewerModal";
+
+const STORY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+const STICKER_OPTIONS = [
+  "❤️",
+  "🔥",
+  "😍",
+  "💍",
+  "💑",
+  "🌹",
+  "✨",
+  "🎉",
+  "👑",
+  "💫",
+  "🌸",
+  "💖",
+];
+const MUSIC_OPTIONS = [
+  { icon: "🎵", label: "Romantic" },
+  { icon: "🎶", label: "Joyful" },
+  { icon: "🎸", label: "Energetic" },
+  { icon: "🕌", label: "Devotional" },
+  { icon: "🎼", label: "Calm" },
+];
 
 function AddStoryDialog({
   onClose,
@@ -16,6 +40,16 @@ function AddStoryDialog({
   const [caption, setCaption] = useState("");
   const [posted, setPosted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedStickers, setSelectedStickers] = useState<string[]>([]);
+  const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
+
+  const toggleSticker = (s: string) => {
+    setSelectedStickers((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
+    );
+  };
 
   const { uploadFile, uploading, progress } = useStorageUpload();
   const addStory = useAddStory();
@@ -39,7 +73,11 @@ function AddStoryDialog({
     setError(null);
     try {
       const url = await uploadFile(selectedFile);
-      await addStory.mutateAsync({ imageUrl: url, caption });
+      const meta =
+        selectedStickers.length > 0 || selectedMusic
+          ? `|||${JSON.stringify({ stickers: selectedStickers, music: selectedMusic })}`
+          : "";
+      await addStory.mutateAsync({ imageUrl: url, caption: caption + meta });
       setPosted(true);
       setTimeout(() => {
         if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -180,6 +218,101 @@ function AddStoryDialog({
             />
           </div>
 
+          {/* Stickers & Music row */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-ocid="stories.add_story.button"
+              onClick={() => setShowStickerPicker(!showStickerPicker)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-white/80 transition-colors"
+              style={{ background: "oklch(0.22 0.06 330)" }}
+            >
+              <Smile className="w-4 h-4" />
+              Stickers{" "}
+              {selectedStickers.length > 0 && (
+                <span style={{ color: "#f43f5e" }}>
+                  ({selectedStickers.length})
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              data-ocid="stories.add_story.secondary_button"
+              onClick={() => setShowMusicPicker(!showMusicPicker)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-white/80 transition-colors"
+              style={{ background: "oklch(0.22 0.06 330)" }}
+            >
+              <Music className="w-4 h-4" />
+              Music{" "}
+              {selectedMusic && <span style={{ color: "#a78bfa" }}>✓</span>}
+            </button>
+          </div>
+
+          {/* Sticker picker */}
+          {showStickerPicker && (
+            <div
+              className="rounded-2xl p-3"
+              style={{ background: "oklch(0.17 0.05 330)" }}
+            >
+              <p className="text-white/50 text-xs mb-2">
+                Tap stickers to add/remove
+              </p>
+              <div className="grid grid-cols-6 gap-2">
+                {STICKER_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => toggleSticker(s)}
+                    className="text-2xl rounded-xl py-1 transition-all"
+                    style={{
+                      background: selectedStickers.includes(s)
+                        ? "oklch(0.35 0.1 330)"
+                        : "oklch(0.22 0.05 330)",
+                      transform: selectedStickers.includes(s)
+                        ? "scale(1.15)"
+                        : "scale(1)",
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Music picker */}
+          {showMusicPicker && (
+            <div
+              className="rounded-2xl p-3"
+              style={{ background: "oklch(0.17 0.05 330)" }}
+            >
+              <p className="text-white/50 text-xs mb-2">Select a mood</p>
+              <div className="flex flex-col gap-1.5">
+                {MUSIC_OPTIONS.map((m) => (
+                  <button
+                    key={m.label}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMusic(
+                        selectedMusic === m.label ? null : m.label,
+                      );
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-white/80 text-left transition-all"
+                    style={{
+                      background:
+                        selectedMusic === m.label
+                          ? "oklch(0.32 0.1 300)"
+                          : "oklch(0.22 0.05 330)",
+                    }}
+                  >
+                    <span className="text-lg">{m.icon}</span>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Progress bar */}
           {isBusy && (
             <div className="space-y-1.5">
@@ -267,9 +400,14 @@ function AddStoryDialog({
 }
 
 export default function StoriesRow() {
-  const { data: stories = [] } = useStories();
+  const { data: allStories = [] } = useStories();
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+
+  // Filter stories older than 24 hours
+  const stories = allStories.filter(
+    (s) => Date.now() - Number(s.timestamp) / 1_000_000 <= STORY_MAX_AGE_MS,
+  );
 
   const addStoryBtn = (
     <button
