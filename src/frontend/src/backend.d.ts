@@ -7,14 +7,6 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
-export interface StoryComment {
-    id: bigint;
-    userId: Principal;
-    storyId: bigint;
-    text: string;
-    authorName: string;
-    timestamp: bigint;
-}
 export interface Story {
     id: bigint;
     userId: Principal;
@@ -23,13 +15,16 @@ export interface Story {
     imageUrl: string;
     timestamp: bigint;
     caption: string;
+    likesCount: bigint;
 }
-export interface Message {
+export interface CallSignal {
     id: bigint;
-    text: string;
+    data: string;
     toUserId: Principal;
+    callType: CallType;
     fromUserId: Principal;
     timestamp: bigint;
+    signalType: CallSignalType;
 }
 export interface Profile {
     age: bigint;
@@ -49,11 +44,52 @@ export interface Profile {
     gender: Gender;
     favoriteMovies: Array<string>;
     mediaUrls: Array<string>;
+    phone?: string;
     religion: string;
     thoughts: string;
     maritalStatus: string;
     location: string;
     hobbies: Array<string>;
+}
+export interface StoryComment {
+    id: bigint;
+    parentCommentId?: bigint;
+    userId: Principal;
+    storyId: bigint;
+    text: string;
+    authorName: string;
+    timestamp: bigint;
+}
+export interface Message {
+    id: bigint;
+    read: boolean;
+    text: string;
+    toUserId: Principal;
+    fromUserId: Principal;
+    timestamp: bigint;
+}
+export interface CallHistory {
+    status: CallStatus;
+    withUserId: Principal;
+    callType: CallType;
+    durationSeconds: bigint;
+    timestamp: bigint;
+}
+export enum CallSignalType {
+    iceCandidate = "iceCandidate",
+    offer = "offer",
+    callEnd = "callEnd",
+    answer = "answer",
+    callDecline = "callDecline"
+}
+export enum CallStatus {
+    completed = "completed",
+    missed = "missed",
+    declined = "declined"
+}
+export enum CallType {
+    video = "video",
+    voice = "voice"
 }
 export enum Gender {
     other = "other",
@@ -76,10 +112,12 @@ export interface backendInterface {
     addStoryComment(storyId: bigint, text: string): Promise<void>;
     adminDeleteProfile(profileId: Principal): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    createOrUpdateProfile(name: string, age: bigint, gender: Gender, religion: string, location: string, bio: string, photoUrl: string | null, occupation: string, height: string, motherTongue: string, maritalStatus: string, interests: Array<string>, hobbies: Array<string>, education: string, favoriteMovies: Array<string>, favoriteSongs: Array<string>, thoughts: string, mood: string, mediaUrls: Array<string>, aboutMe: string): Promise<void>;
+    consumeCallSignals(fromUserId: Principal): Promise<Array<CallSignal>>;
+    createOrUpdateProfile(name: string, age: bigint, gender: Gender, religion: string, location: string, bio: string, photoUrl: string | null, occupation: string, height: string, motherTongue: string, maritalStatus: string, interests: Array<string>, hobbies: Array<string>, education: string, favoriteMovies: Array<string>, favoriteSongs: Array<string>, thoughts: string, mood: string, mediaUrls: Array<string>, aboutMe: string, phone: string | null): Promise<void>;
     declineMatchRequest(fromUserId: Principal): Promise<void>;
     getAllProfiles(): Promise<Array<Profile>>;
     getAllWithRequestedCount(): Promise<Array<[Profile, bigint]>>;
+    getCallHistory(): Promise<Array<[CallHistory, Profile]>>;
     getCallerUserProfile(): Promise<Profile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getMatchRequests(): Promise<Array<[Profile, Variant_pending_accepted_declined]>>;
@@ -87,10 +125,19 @@ export interface backendInterface {
     getMutualMatches(): Promise<Array<Profile>>;
     getStories(): Promise<Array<Story>>;
     getStoryComments(storyId: bigint): Promise<Array<StoryComment>>;
+    getTypingStatus(fromUserId: Principal): Promise<boolean>;
     getUserProfile(userId: Principal): Promise<Profile | null>;
+    hasLikedStory(storyId: bigint): Promise<boolean>;
     isAdmin(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
+    likeStory(storyId: bigint): Promise<void>;
+    logCall(withUserId: Principal, callType: CallType, durationSeconds: bigint, status: CallStatus): Promise<void>;
+    markMessageRead(messageId: bigint): Promise<void>;
+    replyToStoryComment(storyId: bigint, parentCommentId: bigint, text: string): Promise<void>;
     searchProfiles(term: string): Promise<Array<Profile>>;
     sendMatchRequest(toUserId: Principal): Promise<void>;
     sendMessage(toUserId: Principal, text: string): Promise<void>;
+    setTyping(toUserId: Principal, isTyping: boolean): Promise<void>;
+    storeCallSignal(toUserId: Principal, signalType: CallSignalType, data: string, callType: CallType): Promise<void>;
+    unlikeStory(storyId: bigint): Promise<void>;
 }

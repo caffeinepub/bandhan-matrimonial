@@ -2,19 +2,20 @@ import Map "mo:core/Map";
 import Set "mo:core/Set";
 import Array "mo:core/Array";
 import Text "mo:core/Text";
-import Option "mo:core/Option";
 import List "mo:core/List";
-import Order "mo:core/Order";
+import Option "mo:core/Option";
 import Runtime "mo:core/Runtime";
 import Iter "mo:core/Iter";
-import Principal "mo:core/Principal";
 import Time "mo:core/Time";
 import Nat "mo:core/Nat";
-import MixinAuthorization "authorization/MixinAuthorization";
+import Principal "mo:core/Principal";
 import Migration "migration";
+
+import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
+
 
 (with migration = Migration.run)
 actor {
@@ -34,6 +35,7 @@ actor {
     toUserId : Principal;
     text : Text;
     timestamp : Int;
+    read : Bool;
   };
 
   type Profile = {
@@ -58,6 +60,7 @@ actor {
     mood : Text;
     mediaUrls : [Text];
     aboutMe : Text;
+    phone : ?Text;
     createdAt : Int;
   };
 
@@ -69,6 +72,7 @@ actor {
     imageUrl : Text;
     caption : Text;
     timestamp : Int;
+    likesCount : Nat;
   };
 
   type StoryComment = {
@@ -77,6 +81,51 @@ actor {
     userId : Principal;
     authorName : Text;
     text : Text;
+    timestamp : Int;
+    parentCommentId : ?Nat;
+  };
+
+  type TypingStatus = {
+    fromUser : Principal;
+    toUser : Principal;
+    isTyping : Bool;
+    timestamp : Int;
+  };
+
+  type CallSignalType = {
+    #offer;
+    #answer;
+    #iceCandidate;
+    #callEnd;
+    #callDecline;
+  };
+
+  type CallType = {
+    #video;
+    #voice;
+  };
+
+  type CallSignal = {
+    id : Nat;
+    fromUserId : Principal;
+    toUserId : Principal;
+    signalType : CallSignalType;
+    callType : CallType;
+    data : Text;
+    timestamp : Int;
+  };
+
+  type CallStatus = {
+    #completed;
+    #missed;
+    #declined;
+  };
+
+  type CallHistory = {
+    withUserId : Principal;
+    callType : CallType;
+    durationSeconds : Nat;
+    status : CallStatus;
     timestamp : Int;
   };
 
@@ -92,6 +141,15 @@ actor {
 
   let storyComments = Map.empty<Nat, List.List<StoryComment>>();
   var nextCommentId = 1;
+
+  let storyLikes = Map.empty<Nat, Set.Set<Principal>>();
+
+  let callSignals = Map.empty<Principal, List.List<CallSignal>>();
+  var nextSignalId = 1;
+
+  let typingStatuses = List.empty<TypingStatus>();
+
+  let callHistories = Map.empty<Principal, List.List<CallHistory>>();
 
   public shared ({ caller }) func createOrUpdateProfile(
     name : Text,
@@ -114,6 +172,7 @@ actor {
     mood : Text,
     mediaUrls : [Text],
     aboutMe : Text,
+    phone : ?Text,
   ) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can create/update profiles");
@@ -141,6 +200,7 @@ actor {
       mood;
       mediaUrls;
       aboutMe;
+      phone;
       createdAt = Time.now();
     };
 
@@ -351,6 +411,7 @@ actor {
       toUserId;
       text;
       timestamp = Time.now();
+      read = false;
     };
 
     func addMessage(userId : Principal, msg : Message) {
@@ -396,9 +457,11 @@ actor {
           imageUrl;
           caption;
           timestamp = Time.now();
+          likesCount = 0;
         };
 
         stories.add(nextStoryId, story);
+        storyLikes.add(nextStoryId, Set.empty<Principal>());
         nextStoryId += 1;
       };
     };
@@ -410,6 +473,81 @@ actor {
     };
 
     stories.values().toArray();
+  };
+
+  public query ({ caller }) func hasLikedStory(storyId : Nat) : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can check story likes");
+    };
+
+    switch (storyLikes.get(storyId)) {
+      case (null) { false };
+      case (?likes) { likes.contains(caller) };
+    };
+  };
+
+  public shared ({ caller }) func likeStory(storyId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can like stories");
+    };
+
+    switch (stories.get(storyId)) {
+      case (null) { Runtime.trap("Story not found") };
+      case (?_) {
+        switch (storyLikes.get(storyId)) {
+          case (null) { storyLikes.add(storyId, Set.singleton<Principal>(caller)) };
+          case (?likes) {
+            if (likes.contains(caller)) {
+              Runtime.trap("You already liked this story");
+            };
+            likes.add(caller);
+          };
+        };
+
+        switch (stories.get(storyId)) {
+          case (?story) {
+            let updatedStory : Story = {
+              story with likesCount = story.likesCount + 1;
+            };
+            stories.add(storyId, updatedStory);
+          };
+          case (null) {};
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func unlikeStory(storyId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can unlike stories");
+    };
+
+    switch (stories.get(storyId), storyLikes.get(storyId)) {
+      case (null, _) { Runtime.trap("Story not found") };
+      case (_, null) {
+        Runtime.trap("You have not liked this story");
+      };
+      case (?_, ?likes) {
+        if (not likes.contains(caller)) {
+          Runtime.trap("You have not liked this story");
+        };
+
+        let remainingLikes = likes.filter(
+          func(user) { user != caller }
+        );
+        storyLikes.add(storyId, remainingLikes);
+
+        switch (stories.get(storyId)) {
+          case (?story) {
+            let updatedStory : Story = {
+              story with likesCount = Nat.max(0, story.likesCount - 1);
+            };
+            stories.add(storyId, updatedStory);
+          };
+          case (null) {};
+        };
+      };
+    };
   };
 
   public shared ({ caller }) func addStoryComment(storyId : Nat, text : Text) : async () {
@@ -427,10 +565,38 @@ actor {
           authorName = profile.name;
           text;
           timestamp = Time.now();
+          parentCommentId = null;
         };
 
         let existingComments = storyComments.get(storyId).get(List.empty<StoryComment>());
         existingComments.add(comment);
+        storyComments.add(storyId, existingComments);
+
+        nextCommentId += 1;
+      };
+    };
+  };
+
+  public shared ({ caller }) func replyToStoryComment(storyId : Nat, parentCommentId : Nat, text : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can reply to comments");
+    };
+
+    switch (profiles.get(caller)) {
+      case (null) { Runtime.trap("User profile not found") };
+      case (?profile) {
+        let reply : StoryComment = {
+          id = nextCommentId;
+          storyId;
+          userId = caller;
+          authorName = profile.name;
+          text;
+          timestamp = Time.now();
+          parentCommentId = ?parentCommentId;
+        };
+
+        let existingComments = storyComments.get(storyId).get(List.empty<StoryComment>());
+        existingComments.add(reply);
         storyComments.add(storyId, existingComments);
 
         nextCommentId += 1;
@@ -445,6 +611,166 @@ actor {
 
     let comments = storyComments.get(storyId).get(List.empty<StoryComment>());
     comments.toArray();
+  };
+
+  public shared ({ caller }) func storeCallSignal(toUserId : Principal, signalType : CallSignalType, data : Text, callType : CallType) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can store call signals");
+    };
+
+    if (not areMutualMatches(caller, toUserId)) {
+      Runtime.trap("Unauthorized: You can only send call signals to users you are matched with");
+    };
+
+    let signal : CallSignal = {
+      id = nextSignalId;
+      fromUserId = caller;
+      toUserId;
+      signalType;
+      callType;
+      data;
+      timestamp = Time.now();
+    };
+
+    let existingSignals = callSignals.get(toUserId).get(List.empty<CallSignal>());
+    existingSignals.add(signal);
+    callSignals.add(toUserId, existingSignals);
+
+    nextSignalId += 1;
+  };
+
+  public shared ({ caller }) func consumeCallSignals(fromUserId : Principal) : async [CallSignal] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can consume call signals");
+    };
+
+    if (not areMutualMatches(caller, fromUserId)) {
+      Runtime.trap("Unauthorized: You can only consume call signals from users you are matched with");
+    };
+
+    let signals = callSignals.get(caller).get(List.empty<CallSignal>());
+    let filteredSignals = signals.filter(
+      func(signal) { signal.fromUserId == fromUserId }
+    ).toArray();
+
+    let remainingSignals = signals.filter(
+      func(signal) { signal.fromUserId != fromUserId }
+    );
+    callSignals.add(caller, remainingSignals);
+
+    filteredSignals;
+  };
+
+  public shared ({ caller }) func markMessageRead(messageId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can mark messages as read");
+    };
+
+    let userMessages = messages.get(caller).get(List.empty<Message>());
+    var messageFound = false;
+
+    let updatedMessages = userMessages.map<Message, Message>(
+      func(msg) {
+        if (msg.id == messageId) {
+          // Verify that the caller is the recipient of the message
+          if (msg.toUserId != caller) {
+            Runtime.trap("Unauthorized: You can only mark messages sent to you as read");
+          };
+          // Verify mutual match relationship
+          if (not areMutualMatches(caller, msg.fromUserId)) {
+            Runtime.trap("Unauthorized: You can only mark messages from matched users as read");
+          };
+          messageFound := true;
+          { msg with read = true };
+        } else { msg };
+      }
+    );
+
+    if (not messageFound) {
+      Runtime.trap("Message not found");
+    };
+
+    messages.add(caller, updatedMessages);
+  };
+
+  public shared ({ caller }) func setTyping(toUserId : Principal, isTyping : Bool) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can set typing status");
+    };
+
+    if (not areMutualMatches(caller, toUserId)) {
+      Runtime.trap("Unauthorized: You can only set typing status with users you are matched with");
+    };
+
+    typingStatuses.add({
+      fromUser = caller;
+      toUser = toUserId;
+      isTyping;
+      timestamp = Time.now();
+    });
+  };
+
+  public query ({ caller }) func getTypingStatus(fromUserId : Principal) : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can get typing status");
+    };
+
+    if (not areMutualMatches(caller, fromUserId)) {
+      Runtime.trap("Unauthorized: You can only get typing status from users you are matched with");
+    };
+
+    let now = Time.now();
+    let filteredStatuses = typingStatuses.filter(
+      func(status) {
+        status.fromUser == fromUserId and status.toUser == caller and now - status.timestamp < 30_000_000_000
+      }
+    );
+    let isTyping = filteredStatuses.toArray().find(
+      func(status) { status.isTyping }
+    );
+    isTyping != null;
+  };
+
+  public shared ({ caller }) func logCall(withUserId : Principal, callType : CallType, durationSeconds : Nat, status : CallStatus) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can log call history");
+    };
+
+    if (not areMutualMatches(caller, withUserId)) {
+      Runtime.trap("Unauthorized: You can only log calls with users you are matched with");
+    };
+
+    let call : CallHistory = {
+      withUserId;
+      callType;
+      durationSeconds;
+      status;
+      timestamp = Time.now();
+    };
+
+    let existingHistory = callHistories.get(caller).get(List.empty<CallHistory>());
+    existingHistory.add(call);
+    callHistories.add(caller, existingHistory);
+  };
+
+  public query ({ caller }) func getCallHistory() : async [(CallHistory, Profile)] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view call history");
+    };
+
+    let history = callHistories.get(caller).get(List.empty<CallHistory>());
+    let resultList = List.empty<(CallHistory, Profile)>();
+
+    for (call in history.values()) {
+      switch (profiles.get(call.withUserId)) {
+        case (?profile) {
+          resultList.add((call, profile));
+        };
+        case (null) {};
+      };
+    };
+
+    resultList.toArray();
   };
 
   public query ({ caller }) func isAdmin() : async Bool {

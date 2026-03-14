@@ -1,6 +1,16 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Gender, Message, Profile, Story, StoryComment } from "../backend";
+import type {
+  CallHistory,
+  CallSignal,
+  CallStatus,
+  CallType,
+  Gender,
+  Message,
+  Profile,
+  Story,
+  StoryComment,
+} from "../backend";
 import { useActor } from "./useActor";
 
 export function useCallerProfile() {
@@ -123,6 +133,69 @@ export function useStoryComments(storyId: bigint | null) {
       return actor.getStoryComments(storyId);
     },
     enabled: !!actor && !isFetching && storyId !== null,
+    refetchInterval: 3000,
+  });
+}
+
+export function useHasLikedStory(storyId: bigint | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["hasLikedStory", storyId?.toString()],
+    queryFn: async () => {
+      if (!actor || storyId === null) return false;
+      return actor.hasLikedStory(storyId);
+    },
+    enabled: !!actor && !isFetching && storyId !== null,
+  });
+}
+
+export function useLikeStory() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (storyId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.likeStory(storyId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stories"] });
+      queryClient.invalidateQueries({ queryKey: ["hasLikedStory"] });
+    },
+  });
+}
+
+export function useUnlikeStory() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (storyId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.unlikeStory(storyId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stories"] });
+      queryClient.invalidateQueries({ queryKey: ["hasLikedStory"] });
+    },
+  });
+}
+
+export function useReplyToStoryComment() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      storyId,
+      parentCommentId,
+      text,
+    }: { storyId: bigint; parentCommentId: bigint; text: string }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.replyToStoryComment(storyId, parentCommentId, text);
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["storyComments", vars.storyId.toString()],
+      });
+    },
   });
 }
 
@@ -151,6 +224,7 @@ export function useCreateProfile() {
       mood?: string;
       mediaUrls?: string[];
       aboutMe?: string;
+      phone?: string | null;
     }) => {
       if (!actor) throw new Error("Not authenticated");
       await actor.createOrUpdateProfile(
@@ -174,6 +248,7 @@ export function useCreateProfile() {
         data.mood ?? "",
         data.mediaUrls ?? [],
         data.aboutMe ?? "",
+        data.phone ?? null,
       );
     },
     onSuccess: () => {
@@ -304,6 +379,119 @@ export function useAddStoryComment() {
       queryClient.invalidateQueries({
         queryKey: ["storyComments", vars.storyId.toString()],
       });
+    },
+  });
+}
+
+// --- WebRTC, typing, call history ---
+
+export function useCallSignals(fromUserId: Principal | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<CallSignal[]>({
+    queryKey: ["callSignals", fromUserId?.toString()],
+    queryFn: async () => {
+      if (!actor || !fromUserId) return [];
+      return actor.consumeCallSignals(fromUserId);
+    },
+    enabled: !!actor && !isFetching && !!fromUserId,
+    refetchInterval: 1500,
+    staleTime: 0,
+  });
+}
+
+export function useTypingStatus(fromUserId: Principal | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["typingStatus", fromUserId?.toString()],
+    queryFn: async () => {
+      if (!actor || !fromUserId) return false;
+      return actor.getTypingStatus(fromUserId);
+    },
+    enabled: !!actor && !isFetching && !!fromUserId,
+    refetchInterval: 2000,
+    staleTime: 0,
+  });
+}
+
+export function useCallHistory() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Array<[CallHistory, Profile]>>({
+    queryKey: ["callHistory"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getCallHistory();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useMarkMessageRead() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (messageId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.markMessageRead(messageId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+    },
+  });
+}
+
+export function useSetTyping() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async ({
+      toUserId,
+      isTyping,
+    }: { toUserId: Principal; isTyping: boolean }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.setTyping(toUserId, isTyping);
+    },
+  });
+}
+
+export function useStoreCallSignal() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (vars: {
+      toUserId: Principal;
+      signalType: import("../backend").CallSignalType;
+      data: string;
+      callType: import("../backend").CallType;
+    }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.storeCallSignal(
+        vars.toUserId,
+        vars.signalType,
+        vars.data,
+        vars.callType,
+      );
+    },
+  });
+}
+
+export function useLogCall() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      withUserId: Principal;
+      callType: CallType;
+      durationSeconds: bigint;
+      status: CallStatus;
+    }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.logCall(
+        vars.withUserId,
+        vars.callType,
+        vars.durationSeconds,
+        vars.status,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["callHistory"] });
     },
   });
 }

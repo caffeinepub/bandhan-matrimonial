@@ -9,11 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, ChevronRight, Loader2, X } from "lucide-react";
+import { Camera, ChevronRight, Loader2, Upload, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Gender } from "../backend";
 import { useCreateProfile } from "../hooks/useQueries";
+import { useStorageUpload } from "../hooks/useStorageUpload";
 
 const INTERESTS = [
   "Travel",
@@ -68,8 +69,10 @@ interface Props {
 
 export default function ProfileSetupPage({ onComplete }: Props) {
   const createProfile = useCreateProfile();
+  const { uploadFile, uploading, progress } = useStorageUpload();
   const [step, setStep] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaFileRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -90,9 +93,17 @@ export default function ProfileSetupPage({ onComplete }: Props) {
   const [favoriteMovies, setFavoriteMovies] = useState<string[]>([]);
   const [favoriteSongs, setFavoriteSongs] = useState<string[]>([]);
   const [photoUrl, setPhotoUrl] = useState("");
-  const [mediaUrls, setMediaUrls] = useState<string[]>([""]);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [mediaUrls, setMediaUrls] = useState<string[]>(Array(7).fill(""));
+  const [mediaPreviews, setMediaPreviews] = useState<string[]>(
+    Array(7).fill(""),
+  );
   const [movieInput, setMovieInput] = useState("");
   const [songInput, setSongInput] = useState("");
+  const [phone, setPhone] = useState("");
+  const [uploadingMedia, setUploadingMedia] = useState<boolean[]>(
+    Array(7).fill(false),
+  );
 
   const toggleTag = (
     arr: string[],
@@ -113,6 +124,72 @@ export default function ProfileSetupPage({ onComplete }: Props) {
       setFavoriteSongs((p) => [...p, songInput.trim()]);
       setSongInput("");
     }
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    // Upload to storage
+    try {
+      const url = await uploadFile(file);
+      setPhotoUrl(url);
+      toast.success("Photo uploaded!");
+    } catch {
+      toast.error("Photo upload failed");
+    }
+    e.target.value = "";
+  };
+
+  const handleMediaChange = async (
+    idx: number,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Preview
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) =>
+        setMediaPreviews((p) => {
+          const n = [...p];
+          n[idx] = ev.target?.result as string;
+          return n;
+        });
+      reader.readAsDataURL(file);
+    } else {
+      setMediaPreviews((p) => {
+        const n = [...p];
+        n[idx] = "video";
+        return n;
+      });
+    }
+    setUploadingMedia((p) => {
+      const n = [...p];
+      n[idx] = true;
+      return n;
+    });
+    try {
+      const url = await uploadFile(file);
+      setMediaUrls((p) => {
+        const n = [...p];
+        n[idx] = url;
+        return n;
+      });
+      toast.success(`Media ${idx + 1} uploaded!`);
+    } catch {
+      toast.error(`Media ${idx + 1} upload failed`);
+    } finally {
+      setUploadingMedia((p) => {
+        const n = [...p];
+        n[idx] = false;
+        return n;
+      });
+    }
+    e.target.value = "";
   };
 
   const STEPS = [
@@ -151,6 +228,7 @@ export default function ProfileSetupPage({ onComplete }: Props) {
         mood,
         mediaUrls: mediaUrls.filter(Boolean),
         aboutMe,
+        phone: phone || null,
       });
       toast.success("Profile created! Welcome to Bandhan 💍");
       onComplete();
@@ -196,7 +274,7 @@ export default function ProfileSetupPage({ onComplete }: Props) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-24 h-24 rounded-full flex items-center justify-center overflow-hidden"
+                className="w-24 h-24 rounded-full flex items-center justify-center overflow-hidden relative"
                 style={{
                   background: "linear-gradient(135deg,#e11d48,#7c3aed)",
                   padding: 2,
@@ -207,9 +285,9 @@ export default function ProfileSetupPage({ onComplete }: Props) {
                   className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
                   style={{ background: "#1a0a1e" }}
                 >
-                  {photoUrl ? (
+                  {photoPreview || photoUrl ? (
                     <img
-                      src={photoUrl}
+                      src={photoPreview || photoUrl}
                       alt="preview"
                       className="w-full h-full object-cover"
                     />
@@ -217,20 +295,23 @@ export default function ProfileSetupPage({ onComplete }: Props) {
                     <Camera className="w-8 h-8 text-white/50" />
                   )}
                 </div>
+                {uploading && (
+                  <div
+                    className="absolute inset-0 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(0,0,0,0.6)" }}
+                  >
+                    <span className="text-white text-xs font-bold">
+                      {progress}%
+                    </span>
+                  </div>
+                )}
               </button>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    const r = new FileReader();
-                    r.onload = (ev) => setPhotoUrl(ev.target?.result as string);
-                    r.readAsDataURL(f);
-                  }
-                }}
+                onChange={handlePhotoChange}
               />
             </div>
             <Field label="Full Name *">
@@ -269,6 +350,15 @@ export default function ProfileSetupPage({ onComplete }: Props) {
                 </Select>
               </Field>
             </div>
+            <Field label="Phone Number (optional)">
+              <Input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 9876543210"
+                type="tel"
+                data-ocid="profile.input"
+              />
+            </Field>
             <Field label="Marital Status">
               <Select value={maritalStatus} onValueChange={setMaritalStatus}>
                 <SelectTrigger data-ocid="profile.select">
@@ -439,7 +529,7 @@ export default function ProfileSetupPage({ onComplete }: Props) {
                           }
                         : {
                             background: "oklch(0.18 0.05 300)",
-                            color: "white/70",
+                            color: "white",
                             border: "1px solid oklch(0.3 0.06 300)",
                           }
                     }
@@ -470,7 +560,7 @@ export default function ProfileSetupPage({ onComplete }: Props) {
                           }
                         : {
                             background: "oklch(0.18 0.05 300)",
-                            color: "white/70",
+                            color: "white",
                             border: "1px solid oklch(0.3 0.06 300)",
                           }
                     }
@@ -583,24 +673,69 @@ export default function ProfileSetupPage({ onComplete }: Props) {
         {step === 5 && (
           <>
             <p className="text-white/60 text-sm">
-              Add up to 7 photo/video URLs to your gallery
+              Upload up to 7 photos or videos to your gallery
             </p>
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-              <Field key={i} label={`Media ${i + 1}`}>
-                <Input
-                  value={mediaUrls[i] ?? ""}
-                  onChange={(e) =>
-                    setMediaUrls((p) => {
-                      const n = [...p];
-                      n[i] = e.target.value;
-                      return n;
-                    })
-                  }
-                  placeholder="https://..."
-                  data-ocid="profile.input"
-                />
-              </Field>
-            ))}
+            <div className="grid grid-cols-3 gap-3">
+              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => mediaFileRefs.current[i]?.click()}
+                    data-ocid="profile.upload_button"
+                    className="aspect-square rounded-2xl overflow-hidden flex items-center justify-center relative"
+                    style={{
+                      background: mediaUrls[i]
+                        ? "transparent"
+                        : "oklch(0.16 0.06 300)",
+                      border: mediaUrls[i]
+                        ? "none"
+                        : "2px dashed oklch(0.32 0.08 300)",
+                    }}
+                  >
+                    {mediaPreviews[i] ? (
+                      mediaPreviews[i] === "video" ? (
+                        <div
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ background: "oklch(0.16 0.06 300)" }}
+                        >
+                          <span className="text-3xl">🎬</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={mediaPreviews[i]}
+                          alt={`media ${i + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      )
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <Upload className="w-5 h-5 text-white/40" />
+                        <span className="text-white/40 text-[10px]">
+                          Photo {i + 1}
+                        </span>
+                      </div>
+                    )}
+                    {uploadingMedia[i] && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{ background: "rgba(0,0,0,0.6)" }}
+                      >
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
+                  </button>
+                  <input
+                    ref={(el) => {
+                      mediaFileRefs.current[i] = el;
+                    }}
+                    type="file"
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={(e) => handleMediaChange(i, e)}
+                  />
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>

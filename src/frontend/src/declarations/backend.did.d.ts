@@ -10,11 +10,38 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface CallHistory {
+  'status' : CallStatus,
+  'withUserId' : Principal,
+  'callType' : CallType,
+  'durationSeconds' : bigint,
+  'timestamp' : bigint,
+}
+export interface CallSignal {
+  'id' : bigint,
+  'data' : string,
+  'toUserId' : Principal,
+  'callType' : CallType,
+  'fromUserId' : Principal,
+  'timestamp' : bigint,
+  'signalType' : CallSignalType,
+}
+export type CallSignalType = { 'iceCandidate' : null } |
+  { 'offer' : null } |
+  { 'callEnd' : null } |
+  { 'answer' : null } |
+  { 'callDecline' : null };
+export type CallStatus = { 'completed' : null } |
+  { 'missed' : null } |
+  { 'declined' : null };
+export type CallType = { 'video' : null } |
+  { 'voice' : null };
 export type Gender = { 'other' : null } |
   { 'female' : null } |
   { 'male' : null };
 export interface Message {
   'id' : bigint,
+  'read' : boolean,
   'text' : string,
   'toUserId' : Principal,
   'fromUserId' : Principal,
@@ -38,6 +65,7 @@ export interface Profile {
   'gender' : Gender,
   'favoriteMovies' : Array<string>,
   'mediaUrls' : Array<string>,
+  'phone' : [] | [string],
   'religion' : string,
   'thoughts' : string,
   'maritalStatus' : string,
@@ -52,9 +80,11 @@ export interface Story {
   'imageUrl' : string,
   'timestamp' : bigint,
   'caption' : string,
+  'likesCount' : bigint,
 }
 export interface StoryComment {
   'id' : bigint,
+  'parentCommentId' : [] | [bigint],
   'userId' : Principal,
   'storyId' : bigint,
   'text' : string,
@@ -97,6 +127,7 @@ export interface _SERVICE {
   'addStoryComment' : ActorMethod<[bigint, string], undefined>,
   'adminDeleteProfile' : ActorMethod<[Principal], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'consumeCallSignals' : ActorMethod<[Principal], Array<CallSignal>>,
   'createOrUpdateProfile' : ActorMethod<
     [
       string,
@@ -119,12 +150,14 @@ export interface _SERVICE {
       string,
       Array<string>,
       string,
+      [] | [string],
     ],
     undefined
   >,
   'declineMatchRequest' : ActorMethod<[Principal], undefined>,
   'getAllProfiles' : ActorMethod<[], Array<Profile>>,
   'getAllWithRequestedCount' : ActorMethod<[], Array<[Profile, bigint]>>,
+  'getCallHistory' : ActorMethod<[], Array<[CallHistory, Profile]>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [Profile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getMatchRequests' : ActorMethod<
@@ -142,12 +175,24 @@ export interface _SERVICE {
   'getMutualMatches' : ActorMethod<[], Array<Profile>>,
   'getStories' : ActorMethod<[], Array<Story>>,
   'getStoryComments' : ActorMethod<[bigint], Array<StoryComment>>,
+  'getTypingStatus' : ActorMethod<[Principal], boolean>,
   'getUserProfile' : ActorMethod<[Principal], [] | [Profile]>,
+  'hasLikedStory' : ActorMethod<[bigint], boolean>,
   'isAdmin' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'likeStory' : ActorMethod<[bigint], undefined>,
+  'logCall' : ActorMethod<[Principal, CallType, bigint, CallStatus], undefined>,
+  'markMessageRead' : ActorMethod<[bigint], undefined>,
+  'replyToStoryComment' : ActorMethod<[bigint, bigint, string], undefined>,
   'searchProfiles' : ActorMethod<[string], Array<Profile>>,
   'sendMatchRequest' : ActorMethod<[Principal], undefined>,
   'sendMessage' : ActorMethod<[Principal, string], undefined>,
+  'setTyping' : ActorMethod<[Principal, boolean], undefined>,
+  'storeCallSignal' : ActorMethod<
+    [Principal, CallSignalType, string, CallType],
+    undefined
+  >,
+  'unlikeStory' : ActorMethod<[bigint], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

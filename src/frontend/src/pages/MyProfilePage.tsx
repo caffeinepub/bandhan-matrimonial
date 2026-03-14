@@ -9,12 +9,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Edit3, Loader2, LogOut, Save } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  Camera,
+  Edit3,
+  Loader2,
+  LogOut,
+  PhoneCall,
+  Save,
+  Upload,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Gender } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useCallerProfile, useCreateProfile } from "../hooks/useQueries";
+import { useStorageUpload } from "../hooks/useStorageUpload";
 
 const INTERESTS_LIST = [
   "Travel",
@@ -51,11 +60,17 @@ const HOBBIES_LIST = [
   "Blogging",
 ];
 
-export default function MyProfilePage() {
+interface MyProfilePageProps {
+  onCallHistory?: () => void;
+}
+export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
   const { data: profile, isLoading } = useCallerProfile();
   const createProfile = useCreateProfile();
   const { clear: logout } = useInternetIdentity();
+  const { uploadFile, uploading } = useStorageUpload();
   const [editing, setEditing] = useState(false);
+  const photoFileRef = useRef<HTMLInputElement>(null);
+  const mediaFileRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -64,6 +79,7 @@ export default function MyProfilePage() {
   const [location, setLocation] = useState("");
   const [bio, setBio] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [photoPreview, setPhotoPreview] = useState("");
   const [occupation, setOccupation] = useState("");
   const [height, setHeight] = useState("");
   const [motherTongue, setMotherTongue] = useState("");
@@ -76,7 +92,14 @@ export default function MyProfilePage() {
   const [thoughts, setThoughts] = useState("");
   const [mood, setMood] = useState("");
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [mediaPreviews, setMediaPreviews] = useState<string[]>(
+    Array(7).fill(""),
+  );
+  const [uploadingMedia, setUploadingMedia] = useState<boolean[]>(
+    Array(7).fill(false),
+  );
   const [aboutMe, setAboutMe] = useState("");
+  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     if (profile) {
@@ -87,6 +110,7 @@ export default function MyProfilePage() {
       setLocation(profile.location);
       setBio(profile.bio);
       setPhotoUrl(profile.photoUrl ?? "");
+      setPhotoPreview(profile.photoUrl ?? "");
       setOccupation(profile.occupation);
       setHeight(profile.height);
       setMotherTongue(profile.motherTongue);
@@ -99,12 +123,79 @@ export default function MyProfilePage() {
       setThoughts(profile.thoughts);
       setMood(profile.mood);
       setMediaUrls(profile.mediaUrls);
+      setMediaPreviews(
+        [...profile.mediaUrls, ...Array(7).fill("")].slice(0, 7),
+      );
       setAboutMe(profile.aboutMe);
+      setPhone((profile as any).phone ?? "");
     }
   }, [profile]);
 
   const toggle = (arr: string[], set: (a: string[]) => void, val: string) =>
     set(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    try {
+      const url = await uploadFile(file);
+      setPhotoUrl(url);
+      toast.success("Photo uploaded!");
+    } catch {
+      toast.error("Photo upload failed");
+    }
+    e.target.value = "";
+  };
+
+  const handleMediaChange = async (
+    idx: number,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) =>
+        setMediaPreviews((p) => {
+          const n = [...p];
+          n[idx] = ev.target?.result as string;
+          return n;
+        });
+      reader.readAsDataURL(file);
+    } else {
+      setMediaPreviews((p) => {
+        const n = [...p];
+        n[idx] = "video";
+        return n;
+      });
+    }
+    setUploadingMedia((p) => {
+      const n = [...p];
+      n[idx] = true;
+      return n;
+    });
+    try {
+      const url = await uploadFile(file);
+      setMediaUrls((p) => {
+        const n = [...p];
+        n[idx] = url;
+        return n;
+      });
+      toast.success(`Media ${idx + 1} uploaded!`);
+    } catch {
+      toast.error(`Media ${idx + 1} upload failed`);
+    } finally {
+      setUploadingMedia((p) => {
+        const n = [...p];
+        n[idx] = false;
+        return n;
+      });
+    }
+    e.target.value = "";
+  };
 
   const handleSave = async () => {
     try {
@@ -129,6 +220,7 @@ export default function MyProfilePage() {
         mood,
         mediaUrls: mediaUrls.filter(Boolean),
         aboutMe,
+        phone: phone || null,
       });
       toast.success("Profile saved!");
       setEditing(false);
@@ -161,12 +253,21 @@ export default function MyProfilePage() {
 
   return (
     <div className="min-h-screen pb-8" style={{ background: "#0a0010" }}>
+      {/* Hidden inputs */}
+      <input
+        ref={photoFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePhotoChange}
+      />
+
       {/* Hero */}
       <div className="relative h-56">
-        {p?.photoUrl ? (
+        {photoPreview || p?.photoUrl ? (
           <img
-            src={p.photoUrl}
-            alt={p.name}
+            src={photoPreview || p?.photoUrl}
+            alt={p?.name}
             className="w-full h-full object-cover"
           />
         ) : (
@@ -184,6 +285,22 @@ export default function MyProfilePage() {
           }}
         />
         <div className="absolute top-12 right-4 flex gap-2">
+          {editing && (
+            <button
+              type="button"
+              onClick={() => photoFileRef.current?.click()}
+              data-ocid="myprofile.upload_button"
+              className="px-3 py-2 rounded-full flex items-center gap-1.5 text-sm text-white"
+              style={{
+                background: "rgba(0,0,0,0.6)",
+                backdropFilter: "blur(8px)",
+              }}
+              disabled={uploading}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {uploading ? "..." : "Photo"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setEditing((e) => !e)}
@@ -207,6 +324,18 @@ export default function MyProfilePage() {
                 Edit
               </>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={onCallHistory}
+            data-ocid="myprofile.secondary_button"
+            className="px-4 py-2 rounded-full flex items-center gap-2 text-sm text-white/70"
+            style={{
+              background: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
@@ -234,11 +363,13 @@ export default function MyProfilePage() {
       <div className="px-5 space-y-5 mt-4">
         {!editing ? (
           <>
-            {/* View mode */}
             {p?.bio && <Section title="About">{p.bio}</Section>}
             {p?.aboutMe && <Section title="About Me">{p.aboutMe}</Section>}
             {p?.thoughts && (
               <Section title="Life Philosophy">"{p.thoughts}"</Section>
+            )}
+            {(p as any)?.phone && (
+              <Section title="Phone">{(p as any).phone}</Section>
             )}
             <div className="grid grid-cols-3 gap-2">
               {[
@@ -315,7 +446,6 @@ export default function MyProfilePage() {
           </>
         ) : (
           <>
-            {/* Edit mode */}
             <F label="Name">
               <Input
                 value={name}
@@ -348,11 +478,12 @@ export default function MyProfilePage() {
                 </Select>
               </F>
             </div>
-            <F label="Photo URL">
+            <F label="Phone Number (optional)">
               <Input
-                value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)}
-                placeholder="https://..."
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 9876543210"
+                type="tel"
                 data-ocid="myprofile.input"
               />
             </F>
@@ -523,22 +654,73 @@ export default function MyProfilePage() {
                 data-ocid="myprofile.input"
               />
             </F>
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-              <F key={i} label={`Media URL ${i + 1}`}>
-                <Input
-                  value={mediaUrls[i] ?? ""}
-                  onChange={(e) =>
-                    setMediaUrls((p) => {
-                      const n = [...p];
-                      n[i] = e.target.value;
-                      return n;
-                    })
-                  }
-                  placeholder="https://..."
-                  data-ocid="myprofile.input"
-                />
-              </F>
-            ))}
+            {/* Media upload grid */}
+            <div>
+              <Label className="text-white/70 text-sm mb-2 block">
+                Media Gallery
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i}>
+                    <button
+                      type="button"
+                      onClick={() => mediaFileRefs.current[i]?.click()}
+                      data-ocid="myprofile.upload_button"
+                      className="w-full aspect-square rounded-2xl overflow-hidden flex items-center justify-center relative"
+                      style={{
+                        background: mediaPreviews[i]
+                          ? "transparent"
+                          : "oklch(0.16 0.06 300)",
+                        border: mediaPreviews[i]
+                          ? "none"
+                          : "2px dashed oklch(0.32 0.08 300)",
+                      }}
+                    >
+                      {mediaPreviews[i] ? (
+                        mediaPreviews[i] === "video" ? (
+                          <div
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ background: "oklch(0.16 0.06 300)" }}
+                          >
+                            <span className="text-3xl">🎬</span>
+                          </div>
+                        ) : (
+                          <img
+                            src={mediaPreviews[i]}
+                            alt={`media ${i + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        )
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <Upload className="w-4 h-4 text-white/40" />
+                          <span className="text-white/40 text-[9px]">
+                            {i + 1}
+                          </span>
+                        </div>
+                      )}
+                      {uploadingMedia[i] && (
+                        <div
+                          className="absolute inset-0 flex items-center justify-center"
+                          style={{ background: "rgba(0,0,0,0.6)" }}
+                        >
+                          <Loader2 className="w-5 h-5 text-white animate-spin" />
+                        </div>
+                      )}
+                    </button>
+                    <input
+                      ref={(el) => {
+                        mediaFileRefs.current[i] = el;
+                      }}
+                      type="file"
+                      accept="image/*,video/*"
+                      className="hidden"
+                      onChange={(e) => handleMediaChange(i, e)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
             <Button
               onClick={handleSave}
               disabled={createProfile.isPending}

@@ -1,11 +1,23 @@
 import { Toaster } from "@/components/ui/sonner";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Profile } from "./backend";
+import { CallType } from "./backend";
+import { CallSignalType } from "./backend";
 import BottomNav from "./components/BottomNav";
+import {
+  IncomingCallOverlay,
+  useIncomingCallPoller,
+} from "./components/IncomingCallOverlay";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
-import { useCallerProfile, useIsAdmin } from "./hooks/useQueries";
+import {
+  useCallerProfile,
+  useIsAdmin,
+  useMutualMatches,
+  useStoreCallSignal,
+} from "./hooks/useQueries";
 import AdminPage from "./pages/AdminPage";
 import BrowsePage from "./pages/BrowsePage";
+import CallHistoryPage from "./pages/CallHistoryPage";
 import ChatPage from "./pages/ChatPage";
 import ConversationPage from "./pages/ConversationPage";
 import LoginPage from "./pages/LoginPage";
@@ -27,7 +39,14 @@ export type Page =
   | "admin"
   | "viewProfile"
   | "voiceCall"
-  | "videoCall";
+  | "videoCall"
+  | "callHistory";
+
+interface IncomingCallInfo {
+  fromProfile: Profile;
+  callType: CallType;
+  offerData: string;
+}
 
 export default function App() {
   const { identity, isInitializing } = useInternetIdentity();
@@ -35,15 +54,60 @@ export default function App() {
   const [selectedMatchForChat, setSelectedMatchForChat] =
     useState<Profile | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [isInitiator, setIsInitiator] = useState(true);
+  const [initialOfferData, setInitialOfferData] = useState<
+    string | undefined
+  >();
+  const [incomingCall, setIncomingCall] = useState<IncomingCallInfo | null>(
+    null,
+  );
+
   const { data: profile, isLoading: profileLoading } = useCallerProfile();
   const { data: isAdmin } = useIsAdmin();
+  const { data: mutualMatches = [] } = useMutualMatches();
+  const storeSignal = useStoreCallSignal();
 
   const isLoggedIn = !!identity;
   const needsProfile = isLoggedIn && !profileLoading && profile === null;
+  const isInCall = currentPage === "voiceCall" || currentPage === "videoCall";
 
   useEffect(() => {
     if (!isLoggedIn) setCurrentPage("browse");
   }, [isLoggedIn]);
+
+  const handleIncomingCall = useCallback((info: IncomingCallInfo) => {
+    setIncomingCall(info);
+  }, []);
+
+  useIncomingCallPoller({
+    mutualMatches,
+    onIncomingCall: handleIncomingCall,
+    currentCallActive: isInCall,
+  });
+
+  const handleAcceptCall = () => {
+    if (!incomingCall) return;
+    setSelectedProfile(incomingCall.fromProfile);
+    setIsInitiator(false);
+    setInitialOfferData(incomingCall.offerData);
+    setCurrentPage(
+      incomingCall.callType === CallType.video ? "videoCall" : "voiceCall",
+    );
+    setIncomingCall(null);
+  };
+
+  const handleDeclineCall = async () => {
+    if (!incomingCall) return;
+    try {
+      await storeSignal.mutateAsync({
+        toUserId: incomingCall.fromProfile.userId,
+        signalType: CallSignalType.callDecline,
+        data: "",
+        callType: incomingCall.callType,
+      });
+    } catch {}
+    setIncomingCall(null);
+  };
 
   if (isInitializing) {
     return (
@@ -89,6 +153,8 @@ export default function App() {
       <>
         <VoiceCallPage
           profile={selectedProfile}
+          isInitiator={isInitiator}
+          initialOfferData={initialOfferData}
           onEnd={() =>
             setCurrentPage(selectedMatchForChat ? "conversation" : "browse")
           }
@@ -102,10 +168,20 @@ export default function App() {
       <>
         <VideoCallPage
           profile={selectedProfile}
+          isInitiator={isInitiator}
+          initialOfferData={initialOfferData}
           onEnd={() =>
             setCurrentPage(selectedMatchForChat ? "conversation" : "browse")
           }
         />
+        <Toaster />
+      </>
+    );
+  }
+  if (currentPage === "callHistory") {
+    return (
+      <>
+        <CallHistoryPage onBack={() => setCurrentPage("profile")} />
         <Toaster />
       </>
     );
@@ -120,8 +196,16 @@ export default function App() {
             setSelectedMatchForChat(selectedProfile);
             setCurrentPage("conversation");
           }}
-          onVoiceCall={() => setCurrentPage("voiceCall")}
-          onVideoCall={() => setCurrentPage("videoCall")}
+          onVoiceCall={() => {
+            setIsInitiator(true);
+            setInitialOfferData(undefined);
+            setCurrentPage("voiceCall");
+          }}
+          onVideoCall={() => {
+            setIsInitiator(true);
+            setInitialOfferData(undefined);
+            setCurrentPage("videoCall");
+          }}
         />
         <Toaster />
       </>
@@ -135,12 +219,21 @@ export default function App() {
           onBack={() => setCurrentPage("chat")}
           onVoiceCall={() => {
             setSelectedProfile(selectedMatchForChat);
+            setIsInitiator(true);
+            setInitialOfferData(undefined);
             setCurrentPage("voiceCall");
           }}
           onVideoCall={() => {
             setSelectedProfile(selectedMatchForChat);
+            setIsInitiator(true);
+            setInitialOfferData(undefined);
             setCurrentPage("videoCall");
           }}
+        />
+        <IncomingCallOverlay
+          incomingCall={incomingCall}
+          onAccept={handleAcceptCall}
+          onDecline={handleDeclineCall}
         />
         <Toaster />
       </div>
@@ -175,13 +268,20 @@ export default function App() {
             }}
           />
         )}
-        {currentPage === "profile" && <MyProfilePage />}
+        {currentPage === "profile" && (
+          <MyProfilePage onCallHistory={() => setCurrentPage("callHistory")} />
+        )}
         {currentPage === "admin" && isAdmin && <AdminPage />}
       </main>
       <BottomNav
         currentPage={currentPage}
         onNavigate={setCurrentPage}
         isAdmin={!!isAdmin}
+      />
+      <IncomingCallOverlay
+        incomingCall={incomingCall}
+        onAccept={handleAcceptCall}
+        onDecline={handleDeclineCall}
       />
       <Toaster />
     </div>

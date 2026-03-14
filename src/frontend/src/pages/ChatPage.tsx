@@ -1,8 +1,10 @@
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Profile, Story } from "../backend";
+import StoryViewerModal from "../components/StoryViewerModal";
 import { useAddStory, useMutualMatches, useStories } from "../hooks/useQueries";
+import { useStorageUpload } from "../hooks/useStorageUpload";
 
 interface Props {
   onOpenConversation: (p: Profile) => void;
@@ -12,22 +14,42 @@ export default function ChatPage({ onOpenConversation }: Props) {
   const { data: matches = [], isLoading } = useMutualMatches();
   const { data: stories = [] } = useStories();
   const addStory = useAddStory();
+  const { uploadFile, uploading, progress } = useStorageUpload();
   const [viewingStory, setViewingStory] = useState<Story | null>(null);
+  const storyFileRef = useRef<HTMLInputElement>(null);
 
-  const handleAddStory = async () => {
-    const url = prompt("Enter image URL for your story:");
-    if (!url) return;
-    const caption = prompt("Add a caption (optional):") ?? "";
+  const handleAddStory = () => {
+    storyFileRef.current?.click();
+  };
+
+  const handleStoryFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     try {
+      const url = await uploadFile(file);
+      const caption = window.prompt("Add a caption (optional):") ?? "";
       await addStory.mutateAsync({ imageUrl: url, caption });
       toast.success("Story added!");
     } catch {
       toast.error("Failed to add story");
     }
+    // reset input
+    e.target.value = "";
   };
 
   return (
     <div className="min-h-screen pt-14 pb-4" style={{ background: "#0a0010" }}>
+      <input
+        ref={storyFileRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={handleStoryFileChange}
+        data-ocid="chat.dropzone"
+      />
+
       <div className="px-5 py-4">
         <h1 className="text-2xl font-bold text-white">Messages</h1>
       </div>
@@ -38,19 +60,28 @@ export default function ChatPage({ onOpenConversation }: Props) {
           <button
             type="button"
             onClick={handleAddStory}
-            data-ocid="chat.primary_button"
+            data-ocid="chat.upload_button"
             className="flex-shrink-0 flex flex-col items-center gap-1"
+            disabled={uploading}
           >
             <div
-              className="w-14 h-14 rounded-full flex items-center justify-center"
+              className="w-14 h-14 rounded-full flex items-center justify-center relative"
               style={{
                 background: "oklch(0.18 0.06 300)",
                 border: "2px dashed oklch(0.35 0.1 300)",
               }}
             >
-              <Plus className="w-6 h-6 text-white/60" />
+              {uploading ? (
+                <span className="text-white/70 text-[10px] font-bold">
+                  {progress}%
+                </span>
+              ) : (
+                <Plus className="w-6 h-6 text-white/60" />
+              )}
             </div>
-            <span className="text-white/50 text-[10px]">Add Story</span>
+            <span className="text-white/50 text-[10px]">
+              {uploading ? "Uploading..." : "Add Story"}
+            </span>
           </button>
           {stories.map((story) => (
             <button
@@ -67,7 +98,7 @@ export default function ChatPage({ onOpenConversation }: Props) {
                 }}
               >
                 <div
-                  className="w-full h-full rounded-full overflow-hidden"
+                  className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
                   style={{ background: "#1a0a1e" }}
                 >
                   {story.authorPhoto ? (
@@ -169,38 +200,10 @@ export default function ChatPage({ onOpenConversation }: Props) {
 
       {/* Story viewer */}
       {viewingStory && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col"
-          style={{ background: "rgba(0,0,0,0.95)" }}
-          data-ocid="chat.modal"
-        >
-          <button
-            type="button"
-            onClick={() => setViewingStory(null)}
-            data-ocid="chat.close_button"
-            className="absolute top-12 right-4 w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(255,255,255,0.1)" }}
-          >
-            ✕
-          </button>
-          <div className="flex-1 flex items-center justify-center p-4">
-            <img
-              src={viewingStory.imageUrl}
-              alt=""
-              className="max-w-full max-h-[70vh] rounded-2xl object-contain"
-            />
-          </div>
-          <div className="px-5 pb-12">
-            <p className="text-white font-semibold">
-              {viewingStory.authorName}
-            </p>
-            {viewingStory.caption && (
-              <p className="text-white/70 text-sm mt-1">
-                {viewingStory.caption}
-              </p>
-            )}
-          </div>
-        </div>
+        <StoryViewerModal
+          story={viewingStory}
+          onClose={() => setViewingStory(null)}
+        />
       )}
     </div>
   );

@@ -1,10 +1,16 @@
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Phone, Send, Video } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, Phone, Send, Video } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Profile } from "../backend";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useMessages, useSendMessage } from "../hooks/useQueries";
+import {
+  useMarkMessageRead,
+  useMessages,
+  useSendMessage,
+  useSetTyping,
+  useTypingStatus,
+} from "../hooks/useQueries";
 
 interface Props {
   profile: Profile;
@@ -23,18 +29,52 @@ export default function ConversationPage({
   const myPrincipal = identity?.getPrincipal().toString();
   const { data: messages = [] } = useMessages(profile.userId, true);
   const sendMessage = useSendMessage();
+  const markRead = useMarkMessageRead();
+  const setTypingMutation = useSetTyping();
+  const { data: isTyping } = useTypingStatus(profile.userId);
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markedReadRef = useRef<Set<string>>(new Set());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Mark incoming messages as read
+  useEffect(() => {
+    for (const msg of messages) {
+      const key = msg.id.toString();
+      if (
+        msg.toUserId.toString() === myPrincipal &&
+        !msg.read &&
+        !markedReadRef.current.has(key)
+      ) {
+        markedReadRef.current.add(key);
+        markRead.mutate(msg.id);
+      }
+    }
+  }, [messages, myPrincipal, markRead]);
+
+  const handleTyping = useCallback(
+    (val: string) => {
+      setInputValue(val);
+      setTypingMutation.mutate({ toUserId: profile.userId, isTyping: true });
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        setTypingMutation.mutate({ toUserId: profile.userId, isTyping: false });
+      }, 3000);
+    },
+    [profile.userId, setTypingMutation],
+  );
+
   const handleSend = async () => {
     const text = inputValue.trim();
     if (!text) return;
     setInputValue("");
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    setTypingMutation.mutate({ toUserId: profile.userId, isTyping: false });
     try {
       await sendMessage.mutateAsync({ toUserId: profile.userId, text });
     } catch {
@@ -91,7 +131,9 @@ export default function ConversationPage({
           </div>
           <div>
             <p className="font-semibold text-white text-sm">{profile.name}</p>
-            <p className="text-[10px] text-green-400">Online</p>
+            <p className="text-[10px] text-green-400">
+              {isTyping ? "typing..." : "Online"}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -184,15 +226,49 @@ export default function ConversationPage({
                 >
                   {msg.text}
                 </div>
-                <p
-                  className={`text-[10px] text-white/40 mt-1 ${isMine ? "text-right" : "text-left"}`}
+                <div
+                  className={`flex items-center gap-1 mt-0.5 ${isMine ? "justify-end" : "justify-start"}`}
                 >
-                  {time}
-                </p>
+                  <p className="text-[10px] text-white/40">{time}</p>
+                  {isMine && (
+                    <span
+                      className="flex items-center"
+                      title={msg.read ? "Read" : "Sent"}
+                    >
+                      {msg.read ? (
+                        <span className="flex" style={{ color: "#3b82f6" }}>
+                          <Check className="w-3 h-3" />
+                          <Check className="w-3 h-3 -ml-1.5" />
+                        </span>
+                      ) : (
+                        <Check className="w-3 h-3 text-white/30" />
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
         })}
+        {isTyping && (
+          <div className="flex justify-start">
+            <div
+              className="px-4 py-3 rounded-2xl flex gap-1 items-center"
+              style={{ background: "oklch(0.18 0.05 320)" }}
+            >
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 rounded-full"
+                  style={{
+                    background: "oklch(0.65 0.22 10)",
+                    animation: `bounce 1s ease-in-out ${i * 0.2}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -205,7 +281,7 @@ export default function ConversationPage({
       >
         <Input
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => handleTyping(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
