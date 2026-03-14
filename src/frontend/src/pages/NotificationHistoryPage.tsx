@@ -3,7 +3,12 @@ import { useState } from "react";
 
 export interface StoredNotification {
   id: string;
-  type: "match_request" | "mutual_match";
+  type:
+    | "match_request"
+    | "mutual_match"
+    | "story_like"
+    | "story_comment"
+    | "story_reply";
   profileName: string;
   profilePhoto?: string;
   text: string;
@@ -52,12 +57,30 @@ function timeAgo(ts: number) {
   return new Date(ts).toLocaleDateString();
 }
 
-type FilterTab = "all" | "match_request" | "mutual_match";
+function typeBadge(type: StoredNotification["type"]) {
+  switch (type) {
+    case "story_like":
+      return "❤️";
+    case "story_comment":
+      return "💬";
+    case "story_reply":
+      return "💬";
+    case "match_request":
+      return "💕";
+    case "mutual_match":
+      return "🎉";
+    default:
+      return "🔔";
+  }
+}
+
+type FilterTab = "all" | "match_request" | "mutual_match" | "story";
 
 const TABS: { label: string; value: FilterTab }[] = [
   { label: "All", value: "all" },
   { label: "Match Requests", value: "match_request" },
   { label: "Matches", value: "mutual_match" },
+  { label: "Stories", value: "story" },
 ];
 
 interface NotificationHistoryPageProps {
@@ -73,11 +96,33 @@ export default function NotificationHistoryPage({
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
 
   const filtered =
-    activeTab === "all" ? history : history.filter((n) => n.type === activeTab);
+    activeTab === "all"
+      ? history
+      : activeTab === "story"
+        ? history.filter(
+            (n) =>
+              n.type === "story_like" ||
+              n.type === "story_comment" ||
+              n.type === "story_reply",
+          )
+        : history.filter((n) => n.type === activeTab);
 
   const handleClearAll = () => {
     saveNotificationHistory([]);
     setHistory([]);
+  };
+
+  const emptyText = () => {
+    switch (activeTab) {
+      case "all":
+        return "Matches and requests will appear here";
+      case "match_request":
+        return "Match requests will appear here";
+      case "mutual_match":
+        return "Your mutual matches will appear here";
+      case "story":
+        return "Story interactions will appear here";
+    }
   };
 
   return (
@@ -179,19 +224,13 @@ export default function NotificationHistoryPage({
               className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
               style={{ background: "oklch(0.14 0.05 300)" }}
             >
-              🔔
+              {activeTab === "story" ? "📖" : "🔔"}
             </div>
             <div className="text-center">
               <p className="text-white/70 font-medium text-sm">
                 No notifications yet
               </p>
-              <p className="text-white/30 text-xs mt-1">
-                {activeTab === "all"
-                  ? "Matches and requests will appear here"
-                  : activeTab === "match_request"
-                    ? "Match requests will appear here"
-                    : "Your mutual matches will appear here"}
-              </p>
+              <p className="text-white/30 text-xs mt-1">{emptyText()}</p>
             </div>
           </div>
         ) : (
@@ -240,9 +279,7 @@ export default function NotificationHistoryPage({
 
                 {/* Type badge + unread dot */}
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  <span className="text-base">
-                    {n.type === "match_request" ? "💕" : "🎉"}
-                  </span>
+                  <span className="text-base">{typeBadge(n.type)}</span>
                   {!n.read && (
                     <div
                       className="w-2 h-2 rounded-full"

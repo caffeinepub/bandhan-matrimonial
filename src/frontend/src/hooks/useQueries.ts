@@ -16,6 +16,18 @@ import { useActor } from "./useActor";
 // PrivacyVisibility type — matches backend enum values
 export type PrivacyVisibility = "everyone" | "matchesOnly" | "hidden";
 
+export interface StoryNotification {
+  id: bigint;
+  storyId: bigint;
+  storyOwnerId: Principal;
+  actorUserId: Principal;
+  actorName: string;
+  actorPhoto: [] | [string];
+  notifType: { like: null } | { comment: null } | { reply: null };
+  text: string;
+  timestamp: bigint;
+}
+
 export function useCallerProfile() {
   const { actor, isFetching } = useActor();
   return useQuery<Profile | null>({
@@ -383,6 +395,27 @@ export function useAddStoryComment() {
         queryKey: ["storyComments", vars.storyId.toString()],
       });
     },
+  });
+}
+
+// --- Story Notifications ---
+
+export function useStoryNotifications() {
+  const { actor, isFetching } = useActor();
+  return useQuery<StoryNotification[]>({
+    queryKey: ["storyNotifications"],
+    queryFn: async () => {
+      if (!actor) return [];
+      try {
+        return (await (
+          actor as any
+        ).getMyStoryNotifications()) as StoryNotification[];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 10000,
   });
 }
 

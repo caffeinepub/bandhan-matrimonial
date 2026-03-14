@@ -1,25 +1,30 @@
 # Bandhan Matrimonial
 
 ## Current State
-App has a NotificationBell component in the top-right of the main screen that shows a dropdown with current match requests and mutual match notifications. Notifications are tracked using localStorage for seen/unseen state. The dropdown has a max-height with overflow scroll.
+Notification system is localStorage-based for match requests and mutual matches. The NotificationHistoryPage has tabs: All / Match Requests / Matches. The backend already stores story likes, comments, and replies but does not track notifications for story owners.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `NotificationHistoryPage` -- a full-page notification history view listing all past notifications (match requests and mutual matches) with timestamps, profile avatars, notification type icons, and read/unread indicators.
-- "See all" / "View history" button at the bottom of the NotificationBell dropdown that navigates to the history page.
-- `notifications` page type in the Page union in App.tsx.
-- Route handling in App.tsx to render NotificationHistoryPage with a back button.
-- Notification history persisted to localStorage so past notifications remain visible even after they're gone from backend state.
+- Backend `StoryNotification` type with fields: id, storyId, storyOwnerId, actorUserId, actorName, actorPhoto, notifType (#like | #comment | #reply), text, timestamp
+- Backend `storyNotifications` map and `nextStoryNotifId` counter
+- Backend `getMyStoryNotifications` query -- returns all story notifications for the caller (as story owner)
+- Story interactions (`likeStory`, `addStoryComment`, `replyToStoryComment`) now push a notification to the story owner's list
+- Frontend hook `useStoryNotifications` calling `getMyStoryNotifications`
+- "Stories" tab in `NotificationHistoryPage` (tabs: All / Match Requests / Matches / Stories)
+- Story notifications shown with emoji: ❤️ for like, 💬 for comment, 💬 for reply
+- `NotificationBell` polls and shows story notifications in dropdown and unread badge count
 
 ### Modify
-- `App.tsx`: add `"notifications"` to the Page type and render NotificationHistoryPage.
-- `NotificationBell.tsx`: add a "See all" link/button at the bottom of the dropdown that calls a prop/callback to navigate to the notifications page, and persist notifications to localStorage history.
+- `StoredNotification.type` extended to include `"story_like" | "story_comment" | "story_reply"`
+- `NotificationBell` fetches story notifications and merges into display list
+- `NotificationHistoryPage` adds Stories filter tab and correct empty state text
 
 ### Remove
-- Nothing removed.
+- Nothing removed
 
 ## Implementation Plan
-1. Create `src/frontend/src/pages/NotificationHistoryPage.tsx` -- full page with header, back button, grouped or chronological list of all notifications from localStorage history, empty state.
-2. Update `NotificationBell.tsx` to accept optional `onViewAll?: () => void` prop and show a "See all" button at dropdown bottom; also persist each new notification to a localStorage history array.
-3. Update `App.tsx` to add `"notifications"` to Page type, pass `onViewAll` to NotificationBell, and render NotificationHistoryPage with `onBack`.
+1. Update `src/backend/main.mo`: add StoryNotification type, storage map, counter, getMyStoryNotifications query, and push notifications inside likeStory/addStoryComment/replyToStoryComment
+2. Regenerate `backend.d.ts` bindings
+3. Update `NotificationHistoryPage.tsx`: extend StoredNotification type, add Stories tab
+4. Update `NotificationBell.tsx`: add useStoryNotifications hook call, merge story notifs into display and badge count

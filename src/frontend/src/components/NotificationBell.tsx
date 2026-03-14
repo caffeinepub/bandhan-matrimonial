@@ -1,7 +1,12 @@
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Profile } from "../backend";
-import { useMatchRequests, useMutualMatches } from "../hooks/useQueries";
+import {
+  useMatchRequests,
+  useMutualMatches,
+  useStoryNotifications,
+} from "../hooks/useQueries";
+import type { StoryNotification } from "../hooks/useQueries";
 import {
   NOTIF_HISTORY_KEY,
   getNotificationHistory,
@@ -13,6 +18,15 @@ interface Notification {
   id: string;
   type: "match_request" | "mutual_match";
   profile: Profile;
+  text: string;
+  timestamp: number;
+}
+
+interface StoryNotifItem {
+  id: string;
+  type: "story_like" | "story_comment" | "story_reply";
+  profileName: string;
+  profilePhoto?: string;
   text: string;
   timestamp: number;
 }
@@ -53,23 +67,48 @@ function timeAgo(ts: number) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function appendToHistory(notifs: Notification[], seenIds: Set<string>) {
+function appendToHistory(
+  notifs: Notification[],
+  storyNotifs: StoryNotifItem[],
+  seenIds: Set<string>,
+) {
   const existing = getNotificationHistory();
   const existingIds = new Set(existing.map((n) => n.id));
-  const toAdd: StoredNotification[] = notifs
-    .filter((n) => !existingIds.has(n.id))
-    .map((n) => ({
-      id: n.id,
-      type: n.type,
-      profileName: n.profile.name,
-      profilePhoto: n.profile.photoUrl ?? undefined,
-      text: n.text,
-      timestamp: n.timestamp,
-      read: seenIds.has(n.id),
-    }));
+  const toAdd: StoredNotification[] = [
+    ...notifs
+      .filter((n) => !existingIds.has(n.id))
+      .map((n) => ({
+        id: n.id,
+        type: n.type,
+        profileName: n.profile.name,
+        profilePhoto: n.profile.photoUrl ?? undefined,
+        text: n.text,
+        timestamp: n.timestamp,
+        read: seenIds.has(n.id),
+      })),
+    ...storyNotifs
+      .filter((n) => !existingIds.has(n.id))
+      .map((n) => ({
+        id: n.id,
+        type: n.type,
+        profileName: n.profileName,
+        profilePhoto: n.profilePhoto,
+        text: n.text,
+        timestamp: n.timestamp,
+        read: seenIds.has(n.id),
+      })),
+  ];
   if (toAdd.length > 0) {
     saveNotificationHistory([...toAdd, ...existing]);
   }
+}
+
+function storyNotifType(
+  n: StoryNotification,
+): "story_like" | "story_comment" | "story_reply" {
+  if ("like" in n.notifType) return "story_like";
+  if ("reply" in n.notifType) return "story_reply";
+  return "story_comment";
 }
 
 interface NotificationBellProps {
@@ -88,17 +127,20 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     useMatchRequests();
   const { data: mutualMatches = [], refetch: refetchMatches } =
     useMutualMatches();
+  const { data: storyNotificationsRaw = [], refetch: refetchStoryNotifs } =
+    useStoryNotifications();
 
   // Poll every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       refetchRequests();
       refetchMatches();
+      refetchStoryNotifs();
     }, 5000);
     return () => clearInterval(interval);
-  }, [refetchRequests, refetchMatches]);
+  }, [refetchRequests, refetchMatches, refetchStoryNotifs]);
 
-  // Build notifications
+  // Build match/mutual notifications
   const notifications: Notification[] = [
     ...matchRequests
       .filter(([, status]) => status === "pending")
@@ -120,6 +162,16 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     })),
   ];
 
+  // Build story notification items
+  const storyNotifItems: StoryNotifItem[] = storyNotificationsRaw.map((n) => ({
+    id: `story_${n.id.toString()}`,
+    type: storyNotifType(n),
+    profileName: n.actorName,
+    profilePhoto: n.actorPhoto[0] ?? undefined,
+    text: n.text,
+    timestamp: Number(n.timestamp / 1_000_000n),
+  }));
+
   // Track when new notifications appear
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional - only re-run on matchRequests/mutualMatches changes
   useEffect(() => {
@@ -139,24 +191,30 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
   // Persist new notifications to history
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (notifications.length > 0) {
-      appendToHistory(notifications, seenIds);
+    if (notifications.length > 0 || storyNotifItems.length > 0) {
+      appendToHistory(notifications, storyNotifItems, seenIds);
     }
-  }, [matchRequests, mutualMatches]);
+  }, [matchRequests, mutualMatches, storyNotificationsRaw]);
 
-  const unreadCount = notifications.filter((n) => !seenIds.has(n.id)).length;
+  const matchUnread = notifications.filter((n) => !seenIds.has(n.id)).length;
+  const storyUnread = storyNotifItems.filter((n) => !seenIds.has(n.id)).length;
+  const unreadCount = matchUnread + storyUnread;
 
   const handleOpen = () => {
     setOpen((prev) => !prev);
     // Mark all as seen when opening
-    const newSeen = new Set([...seenIds, ...notifications.map((n) => n.id)]);
+    const allIds = [
+      ...notifications.map((n) => n.id),
+      ...storyNotifItems.map((n) => n.id),
+    ];
+    const newSeen = new Set([...seenIds, ...allIds]);
     setSeenIds(newSeen);
     saveSeenIds(newSeen);
     // Also mark as read in history
     try {
       const hist = getNotificationHistory();
       const updated = hist.map((h) =>
-        notifications.find((n) => n.id === h.id) ? { ...h, read: true } : h,
+        allIds.includes(h.id) ? { ...h, read: true } : h,
       );
       localStorage.setItem(NOTIF_HISTORY_KEY, JSON.stringify(updated));
     } catch {}
@@ -175,6 +233,33 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     if (open) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  // Combined list for dropdown (sorted by timestamp descending)
+  const allDropdownItems: Array<{
+    id: string;
+    name: string;
+    photo?: string;
+    text: string;
+    timestamp: number;
+    emoji: string;
+  }> = [
+    ...notifications.map((n) => ({
+      id: n.id,
+      name: n.profile.name,
+      photo: n.profile.photoUrl ?? undefined,
+      text: n.text,
+      timestamp: notifTimestamps[n.id] ?? Date.now(),
+      emoji: n.type === "match_request" ? "💕" : "🎉",
+    })),
+    ...storyNotifItems.map((n) => ({
+      id: n.id,
+      name: n.profileName,
+      photo: n.profilePhoto,
+      text: n.text,
+      timestamp: n.timestamp,
+      emoji: n.type === "story_like" ? "❤️" : "💬",
+    })),
+  ].sort((a, b) => b.timestamp - a.timestamp);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -220,7 +305,7 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
             <p className="text-white font-semibold text-sm">Notifications</p>
           </div>
 
-          {notifications.length === 0 ? (
+          {allDropdownItems.length === 0 ? (
             <div
               className="py-10 text-center"
               data-ocid="notifications.empty_state"
@@ -230,7 +315,7 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
             </div>
           ) : (
             <div className="max-h-80 overflow-y-auto">
-              {notifications.map((n, idx) => (
+              {allDropdownItems.map((n, idx) => (
                 <div
                   key={n.id}
                   data-ocid={`notifications.item.${idx + 1}`}
@@ -246,19 +331,19 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
                   <div
                     className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
                     style={{
-                      background: n.profile.photoUrl
+                      background: n.photo
                         ? undefined
-                        : `linear-gradient(135deg,hsl(${(n.profile.name.charCodeAt(0) * 10) % 360},70%,40%),hsl(${(n.profile.name.charCodeAt(0) * 10 + 120) % 360},70%,30%))`,
+                        : `linear-gradient(135deg,hsl(${(n.name.charCodeAt(0) * 10) % 360},70%,40%),hsl(${(n.name.charCodeAt(0) * 10 + 120) % 360},70%,30%))`,
                     }}
                   >
-                    {n.profile.photoUrl ? (
+                    {n.photo ? (
                       <img
-                        src={n.profile.photoUrl}
-                        alt={n.profile.name}
+                        src={n.photo}
+                        alt={n.name}
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      getInitials(n.profile.name)
+                      getInitials(n.name)
                     )}
                   </div>
 
@@ -268,17 +353,20 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
                       {n.text}
                     </p>
                     <p className="text-white/40 text-xs mt-0.5">
-                      {timeAgo(notifTimestamps[n.id] ?? Date.now())}
+                      {timeAgo(n.timestamp)}
                     </p>
                   </div>
 
-                  {/* Dot for unread */}
-                  {!seenIds.has(n.id) && (
-                    <div
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ background: "oklch(0.65 0.22 10)" }}
-                    />
-                  )}
+                  {/* Emoji + unread dot */}
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className="text-base">{n.emoji}</span>
+                    {!seenIds.has(n.id) && (
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ background: "oklch(0.65 0.22 10)" }}
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

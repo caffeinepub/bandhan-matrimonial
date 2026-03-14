@@ -104,6 +104,24 @@ actor {
     parentCommentId : ?Nat;
   };
 
+  type StoryNotifType = {
+    #like;
+    #comment;
+    #reply;
+  };
+
+  type StoryNotification = {
+    id : Nat;
+    storyId : Nat;
+    storyOwnerId : Principal;
+    actorUserId : Principal;
+    actorName : Text;
+    actorPhoto : ?Text;
+    notifType : StoryNotifType;
+    text : Text;
+    timestamp : Int;
+  };
+
   type TypingStatus = {
     fromUser : Principal;
     toUser : Principal;
@@ -170,6 +188,10 @@ actor {
 
   let storyLikes = Map.empty<Nat, Set.Set<Principal>>();
 
+  // Story notifications keyed by story owner principal
+  let storyNotifications = Map.empty<Principal, List.List<StoryNotification>>();
+  var nextStoryNotifId = 1;
+
   let callSignals = Map.empty<Principal, List.List<CallSignal>>();
   var nextSignalId = 1;
 
@@ -186,6 +208,14 @@ actor {
       case (?#hidden) { false };
       case (?#matchesOnly) { areMutualMatches(caller, profileUserId) };
     };
+  };
+
+  func pushStoryNotif(storyOwnerId : Principal, notif : StoryNotification) {
+    // Don't notify yourself
+    if (storyOwnerId == notif.actorUserId) { return };
+    let existing = storyNotifications.get(storyOwnerId).get(List.empty<StoryNotification>());
+    existing.add(notif);
+    storyNotifications.add(storyOwnerId, existing);
   };
 
   public shared ({ caller }) func setPrivacyVisibility(visibility : PrivacyVisibility) : async () {
@@ -668,7 +698,7 @@ actor {
 
     switch (stories.get(storyId)) {
       case (null) { Runtime.trap("Story not found") };
-      case (?_) {
+      case (?story) {
         switch (storyLikes.get(storyId)) {
           case (null) { storyLikes.add(storyId, Set.singleton<Principal>(caller)) };
           case (?likes) {
@@ -680,11 +710,31 @@ actor {
         };
 
         switch (stories.get(storyId)) {
-          case (?story) {
+          case (?s) {
             let updatedStory : Story = {
-              story with likesCount = story.likesCount + 1;
+              s with likesCount = s.likesCount + 1;
             };
             stories.add(storyId, updatedStory);
+          };
+          case (null) {};
+        };
+
+        // Push notification to story owner
+        switch (profiles.get(caller)) {
+          case (?actorProfile) {
+            let notif : StoryNotification = {
+              id = nextStoryNotifId;
+              storyId;
+              storyOwnerId = story.userId;
+              actorUserId = caller;
+              actorName = actorProfile.name;
+              actorPhoto = actorProfile.photoUrl;
+              notifType = #like;
+              text = actorProfile.name # " liked your story \u{2764}";
+              timestamp = Time.now();
+            };
+            pushStoryNotif(story.userId, notif);
+            nextStoryNotifId += 1;
           };
           case (null) {};
         };
@@ -748,6 +798,26 @@ actor {
         storyComments.add(storyId, existingComments);
 
         nextCommentId += 1;
+
+        // Push notification to story owner
+        switch (stories.get(storyId)) {
+          case (?story) {
+            let notif : StoryNotification = {
+              id = nextStoryNotifId;
+              storyId;
+              storyOwnerId = story.userId;
+              actorUserId = caller;
+              actorName = profile.name;
+              actorPhoto = profile.photoUrl;
+              notifType = #comment;
+              text = profile.name # " commented on your story: \"" # text # "\"";
+              timestamp = Time.now();
+            };
+            pushStoryNotif(story.userId, notif);
+            nextStoryNotifId += 1;
+          };
+          case (null) {};
+        };
       };
     };
   };
@@ -775,6 +845,26 @@ actor {
         storyComments.add(storyId, existingComments);
 
         nextCommentId += 1;
+
+        // Push notification to story owner
+        switch (stories.get(storyId)) {
+          case (?story) {
+            let notif : StoryNotification = {
+              id = nextStoryNotifId;
+              storyId;
+              storyOwnerId = story.userId;
+              actorUserId = caller;
+              actorName = profile.name;
+              actorPhoto = profile.photoUrl;
+              notifType = #reply;
+              text = profile.name # " replied to a comment on your story: \"" # text # "\"";
+              timestamp = Time.now();
+            };
+            pushStoryNotif(story.userId, notif);
+            nextStoryNotifId += 1;
+          };
+          case (null) {};
+        };
       };
     };
   };
@@ -786,6 +876,13 @@ actor {
 
     let comments = storyComments.get(storyId).get(List.empty<StoryComment>());
     comments.toArray();
+  };
+
+  public query ({ caller }) func getMyStoryNotifications() : async [StoryNotification] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized");
+    };
+    storyNotifications.get(caller).get(List.empty<StoryNotification>()).toArray();
   };
 
   public shared ({ caller }) func storeCallSignal(toUserId : Principal, signalType : CallSignalType, data : Text, callType : CallType) : async () {
