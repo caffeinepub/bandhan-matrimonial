@@ -161,6 +161,50 @@ actor {
     timestamp : Int;
   };
 
+  type ProfileView = {
+    viewerId : Principal;
+    timestamp : Int;
+  };
+
+  type LiveStreamFilter = {
+    #all;
+    #gender : Gender;
+    #religion : Text;
+  };
+
+  type LiveStream = {
+    id : Nat;
+    hostId : Principal;
+    hostName : Text;
+    hostPhoto : ?Text;
+    title : Text;
+    startedAt : Int;
+    isActive : Bool;
+    filterSetting : LiveStreamFilter;
+    matchesOnly : Bool;
+  };
+
+  type LiveMessage = {
+    id : Int;
+    liveId : Nat;
+    userId : Principal;
+    userName : Text;
+    text : Text;
+    timestamp : Int;
+  };
+
+  type LiveReaction = {
+    liveId : Nat;
+    userId : Principal;
+    emoji : Text;
+    timestamp : Int;
+  };
+
+  type SuperLikeNotification = {
+    fromProfile : Profile;
+    timestamp : Int;
+  };
+
   let profiles = Map.empty<Principal, Profile>();
   let matches = Map.empty<Principal, Set.Set<Principal>>();
   let matchRequests = Map.empty<Principal, Map.Map<Principal, { #pending; #accepted; #declined }>>();
@@ -181,11 +225,10 @@ actor {
   var nextCommentId = 1;
 
   let storyLikes = Map.empty<Nat, Set.Set<Principal>>();
-  let storyReactions = Map.empty<Nat, Map.Map<Principal, Text>>(); // storyId -> userId -> emoji reaction
+  let storyReactions = Map.empty<Nat, Map.Map<Principal, Text>>();
 
-  let storyViews = Map.empty<Nat, Set.Set<Principal>>(); // storyId -> viewers
+  let storyViews = Map.empty<Nat, Set.Set<Principal>>();
 
-  // Story notifications keyed by story owner principal
   let storyNotifications = Map.empty<Principal, List.List<StoryNotification>>();
   var nextStoryNotifId = 1;
 
@@ -196,26 +239,51 @@ actor {
 
   let callHistories = Map.empty<Principal, List.List<CallHistory>>();
 
+  // Profile views tracking
+  let profileViews = Map.empty<Principal, List.List<ProfileView>>();
+
+  // Super likes tracking
+  let superLikes = Map.empty<Principal, Set.Set<Principal>>();
+
+  // Live streams tracking
+  let liveStreams = Map.empty<Nat, LiveStream>();
+  var nextLiveId = 1;
+
+  let liveMessages = Map.empty<Nat, List.List<LiveMessage>>();
+  let liveViewers = Map.empty<Nat, Set.Set<Principal>>();
+  let liveReactions = Map.empty<Nat, List.List<LiveReaction>>();
+  let blockedLiveUsers = Map.empty<Nat, Set.Set<Principal>>();
+
+  // Super like notifications
+  let superLikeNotifs = Map.empty<Principal, List.List<SuperLikeNotification>>();
+
   // Privacy helpers
   func isProfileVisible(profileUserId : Principal, caller : Principal) : Bool {
-    let visibility = privacySettings.get(profileUserId);
+    let visibility = privacySettings.get(profileUserId).get(#everyone);
     switch (visibility) {
-      case (null) { true };
-      case (?#everyone) { true };
-      case (?#hidden) { false };
-      case (?#matchesOnly) { areMutualMatches(caller, profileUserId) };
+      case (#everyone) { true };
+      case (#hidden) { false };
+      case (#matchesOnly) { areMutualMatches(caller, profileUserId) };
     };
   };
 
   func pushStoryNotif(storyOwnerId : Principal, notif : StoryNotification) {
-    // Don't notify yourself
     if (storyOwnerId == notif.actorUserId) { return };
     let existing = storyNotifications.get(storyOwnerId).get(List.empty<StoryNotification>());
     existing.add(notif);
     storyNotifications.add(storyOwnerId, existing);
   };
 
-  // Privacy and premium status functions (unchanged)
+  func areMutualMatches(user1 : Principal, user2 : Principal) : Bool {
+    switch (matches.get(user1)) {
+      case (?user1Matches) {
+        user1Matches.contains(user2);
+      };
+      case (null) { false };
+    };
+  };
+
+  // Privacy and premium status functions
   public shared ({ caller }) func setPrivacyVisibility(visibility : PrivacyVisibility) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can set privacy settings");
@@ -258,7 +326,7 @@ actor {
     showLastActiveStatus.get(caller).get(true);
   };
 
-  // Profile management (unchanged)
+  // Profile management
   public shared ({ caller }) func createOrUpdateProfile(
     name : Text,
     age : Nat,
@@ -322,6 +390,14 @@ actor {
     profiles.get(caller);
   };
 
+  public shared ({ caller }) func saveCallerUserProfile(profile : Profile) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    let updatedProfile = { profile with userId = caller };
+    profiles.add(caller, updatedProfile);
+  };
+
   public query ({ caller }) func getUserProfile(userId : Principal) : async ?Profile {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can view profiles");
@@ -362,7 +438,162 @@ actor {
     );
   };
 
-  // Match requests and matching (unchanged)
+  // Profile view tracking
+  public shared ({ caller }) func recordProfileView(userId : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can record profile views");
+    };
+
+    if (caller == userId) {
+      Runtime.trap("Cannot record view of your own profile");
+    };
+
+    if (not profiles.containsKey(userId)) {
+      Runtime.trap("Profile does not exist");
+    };
+
+    let view : ProfileView = {
+      viewerId = caller;
+      timestamp = Time.now();
+    };
+
+    let existingViews = profileViews.get(userId).get(List.empty<ProfileView>());
+    existingViews.add(view);
+    profileViews.add(userId, existingViews);
+  };
+
+  public query ({ caller }) func getProfileViewers() : async [(Profile, Int)] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view profile viewers");
+    };
+
+    let views = profileViews.get(caller).get(List.empty<ProfileView>());
+    let resultList = List.empty<(Profile, Int)>();
+
+    for (view in views.values()) {
+      if (areMutualMatches(caller, view.viewerId)) {
+        switch (profiles.get(view.viewerId)) {
+          case (?profile) {
+            resultList.add((profile, view.timestamp));
+          };
+          case (null) {};
+        };
+      };
+    };
+
+    resultList.toArray();
+  };
+
+  public query ({ caller }) func getProfileViewCount() : async Nat {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view profile view count");
+    };
+
+    let views = profileViews.get(caller).get(List.empty<ProfileView>());
+    views.size();
+  };
+
+  // Super like functionality
+  public shared ({ caller }) func superLikeUser(userId : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can super like");
+    };
+
+    if (caller == userId) {
+      Runtime.trap("Cannot super like yourself");
+    };
+
+    if (not profiles.containsKey(userId)) {
+      Runtime.trap("User profile does not exist");
+    };
+
+    let userSuperLikes = superLikes.get(caller).get(Set.empty<Principal>());
+    
+    if (userSuperLikes.contains(userId)) {
+      Runtime.trap("You have already super liked this user");
+    };
+
+    userSuperLikes.add(userId);
+    superLikes.add(caller, userSuperLikes);
+
+    // Create super like notification for target user
+    switch (profiles.get(caller)) {
+      case (?fromProfile) {
+        let notif : SuperLikeNotification = {
+          fromProfile;
+          timestamp = Time.now();
+        };
+
+        let existingNotifs = superLikeNotifs.get(userId).get(List.empty<SuperLikeNotification>());
+        existingNotifs.add(notif);
+        superLikeNotifs.add(userId, existingNotifs);
+      };
+      case (null) {};
+    };
+  };
+
+  public shared ({ caller }) func unsuperLikeUser(userId : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can unsuperlike");
+    };
+
+    switch (superLikes.get(caller)) {
+      case (null) {
+        Runtime.trap("You have not super liked this user");
+      };
+      case (?userSuperLikes) {
+        if (not userSuperLikes.contains(userId)) {
+          Runtime.trap("You have not super liked this user");
+        };
+
+        let remainingSuperLikes = userSuperLikes.filter(
+          func(user) { user != userId }
+        );
+        superLikes.add(caller, remainingSuperLikes);
+      };
+    };
+  };
+
+  public query ({ caller }) func hasSuperLiked(userId : Principal) : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can check super like status");
+    };
+
+    switch (superLikes.get(caller)) {
+      case (null) { false };
+      case (?userSuperLikes) { userSuperLikes.contains(userId) };
+    };
+  };
+
+  public query ({ caller }) func getSuperLikedBy() : async [Profile] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view who super liked them");
+    };
+
+    let resultList = List.empty<Profile>();
+
+    for ((userId, userSuperLikes) in superLikes.entries()) {
+      if (userSuperLikes.contains(caller)) {
+        switch (profiles.get(userId)) {
+          case (?profile) {
+            resultList.add(profile);
+          };
+          case (null) {};
+        };
+      };
+    };
+
+    resultList.toArray();
+  };
+
+  public query ({ caller }) func getSuperLikeNotifications() : async [SuperLikeNotification] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view super like notifications");
+    };
+    superLikeNotifs.get(caller).get(List.empty<SuperLikeNotification>()).toArray();
+  };
+
+  // Match requests and matching
   public shared ({ caller }) func sendMatchRequest(toUserId : Principal) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can send match requests");
@@ -501,16 +732,56 @@ actor {
     );
   };
 
-  func areMutualMatches(user1 : Principal, user2 : Principal) : Bool {
-    switch (matches.get(user1)) {
-      case (?user1Matches) {
-        user1Matches.contains(user2);
-      };
-      case (null) { false };
+  // Daily match suggestions
+  public query ({ caller }) func getDailySuggestions() : async [Profile] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can get suggestions");
     };
+
+    let callerProfile = switch (profiles.get(caller)) {
+      case (?profile) { profile };
+      case (null) { Runtime.trap("No profile found") };
+    };
+
+    let callerMatches = matches.get(caller).get(Set.empty<Principal>());
+
+    let allProfiles = List.empty<Profile>();
+    for ((_, profile) in profiles.entries()) {
+      allProfiles.add(profile);
+    };
+
+    let eligibleProfiles = allProfiles.filter(
+      func(profile) {
+        profile.userId != caller and not callerMatches.contains(profile.userId)
+      }
+    ).toArray();
+
+    let scoredProfiles = eligibleProfiles.map(
+      func(profile) {
+        var sharedCount = 0;
+        let callerInterestsSet = Set.fromIter(callerProfile.interests.values());
+        for (interest in profile.interests.values()) {
+          if (callerInterestsSet.contains(interest)) {
+            sharedCount += 1;
+          };
+        };
+        (profile, sharedCount);
+      }
+    );
+
+    let sortedProfiles = scoredProfiles.sort(
+      func(a, b) {
+        let (_profileA, sharedA) = a;
+        let (_profileB, sharedB) = b;
+        Nat.compare(sharedB, sharedA);
+      }
+    );
+
+    let result = sortedProfiles.map(func((profile, _shared)) { profile });
+    result.sliceToArray(0, if (result.size() < 10) { result.size() } else { 10 });
   };
 
-  // Messaging and reactions (unchanged)
+  // Messaging and reactions
   public shared ({ caller }) func sendMessage(toUserId : Principal, text : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can send messages");
@@ -575,14 +846,14 @@ actor {
 
   public shared ({ caller }) func reactToMessage(messageId : Nat, emoji : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized");
+      Runtime.trap("Unauthorized: Only users can react to messages");
     };
     messageReactions.add(messageId, emoji);
   };
 
   public shared ({ caller }) func editMessage(messageId : Nat, newText : Text) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized");
+      Runtime.trap("Unauthorized: Only users can edit messages");
     };
 
     let userMessages = messages.get(caller).get(List.empty<Message>());
@@ -608,7 +879,6 @@ actor {
 
     messages.add(caller, updatedMessages);
 
-    // Update in recipient's message list
     if (otherUserId != caller) {
       let otherMessages = messages.get(otherUserId).get(List.empty<Message>());
       let updatedOtherMessages = otherMessages.map<Message, Message>(
@@ -624,10 +894,9 @@ actor {
 
   public shared ({ caller }) func deleteMessage(messageId : Nat) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized");
+      Runtime.trap("Unauthorized: Only users can delete messages");
     };
 
-    // Verify the message exists and belongs to caller
     let userMessages = messages.get(caller).get(List.empty<Message>());
     let found = userMessages.toArray().find(
       func(msg) { msg.id == messageId and msg.fromUserId == caller }
@@ -841,7 +1110,6 @@ actor {
           case (null) {};
         };
 
-        // Push notification to story owner
         switch (profiles.get(caller)) {
           case (?actorProfile) {
             let notif : StoryNotification = {
@@ -921,7 +1189,6 @@ actor {
 
         nextCommentId += 1;
 
-        // Push notification to story owner
         switch (stories.get(storyId)) {
           case (?story) {
             let notif : StoryNotification = {
@@ -968,7 +1235,6 @@ actor {
 
         nextCommentId += 1;
 
-        // Push notification to story owner
         switch (stories.get(storyId)) {
           case (?story) {
             let notif : StoryNotification = {
@@ -1002,12 +1268,23 @@ actor {
 
   public query ({ caller }) func getMyStoryNotifications() : async [StoryNotification] {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized");
+      Runtime.trap("Unauthorized: Only users can view notifications");
     };
     storyNotifications.get(caller).get(List.empty<StoryNotification>()).toArray();
   };
 
-  // Call signal functions (unchanged)
+  // Returns both story and super like notifications
+  public query ({ caller }) func getMyNotifications() : async ([StoryNotification], [SuperLikeNotification]) {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can get notifications");
+    };
+    let storyNotifs = storyNotifications.get(caller).get(List.empty<StoryNotification>()).toArray();
+    let superLikeNotifsArr = superLikeNotifs.get(caller).get(List.empty<SuperLikeNotification>()).toArray();
+
+    (storyNotifs, superLikeNotifsArr);
+  };
+
+  // Call signal functions
   public shared ({ caller }) func storeCallSignal(toUserId : Principal, signalType : CallSignalType, data : Text, callType : CallType) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can store call signals");
@@ -1056,7 +1333,7 @@ actor {
     filteredSignals;
   };
 
-  // Message read/typing/call log functions (unchanged)
+  // Message read/typing/call log functions
   public shared ({ caller }) func markMessageRead(messageId : Nat) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can mark messages as read");
@@ -1167,7 +1444,7 @@ actor {
     resultList.toArray();
   };
 
-  // Admin and special/analytics functions (unchanged)
+  // Admin and special/analytics functions
   public query ({ caller }) func isAdmin() : async Bool {
     AccessControl.isAdmin(accessControlState, caller);
   };
@@ -1215,6 +1492,240 @@ actor {
     switch (storyLikes.get(storyId)) {
       case (null) { false };
       case (?likes) { likes.contains(caller) };
+    };
+  };
+
+  // Live stream functions
+  public shared ({ caller }) func startLive(title : Text, matchesOnly : Bool) : async Nat {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can start live streams");
+    };
+
+    switch (profiles.get(caller)) {
+      case (?profile) {
+        let live : LiveStream = {
+          id = nextLiveId;
+          hostId = caller;
+          hostName = profile.name;
+          hostPhoto = profile.photoUrl;
+          title;
+          startedAt = Time.now();
+          isActive = true;
+          filterSetting = #all;
+          matchesOnly;
+        };
+
+        liveStreams.add(nextLiveId, live);
+        liveMessages.add(nextLiveId, List.empty<LiveMessage>());
+        liveViewers.add(nextLiveId, Set.empty<Principal>());
+        liveReactions.add(nextLiveId, List.empty<LiveReaction>());
+        blockedLiveUsers.add(nextLiveId, Set.empty<Principal>());
+        let liveId = nextLiveId;
+        nextLiveId += 1;
+        liveId;
+      };
+      case (null) { Runtime.trap("Profile not found") };
+    };
+  };
+
+  public shared ({ caller }) func endLive(liveId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can end lives streams");
+    };
+
+    switch (liveStreams.get(liveId)) {
+      case (null) { Runtime.trap("Live stream not found") };
+      case (?live) {
+        if (live.hostId != caller) {
+          Runtime.trap("Unauthorized: Only host can end live stream");
+        };
+        liveStreams.add(liveId, { live with isActive = false });
+      };
+    };
+  };
+
+  public query ({ caller }) func getActiveLives() : async [LiveStream] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view active live streams");
+    };
+    liveStreams.values().toArray().filter(
+      func(live) { live.isActive }
+    );
+  };
+
+  public shared ({ caller }) func joinLive(liveId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can join live streams");
+    };
+
+    switch (liveStreams.get(liveId)) {
+      case (null) { Runtime.trap("Live stream not found") };
+      case (?live) {
+        if (live.matchesOnly and not areMutualMatches(caller, live.hostId)) {
+          Runtime.trap("Unauthorized: This live stream is for matches only");
+        };
+
+        switch (blockedLiveUsers.get(liveId)) {
+          case (?blocked) {
+            if (blocked.contains(caller)) {
+              Runtime.trap("You are blocked from this live");
+            };
+          };
+          case (null) {};
+        };
+
+        switch (liveViewers.get(liveId)) {
+          case (?viewers) { viewers.add(caller) };
+          case (null) {};
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func leaveLive(liveId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can leave live streams");
+    };
+
+    switch (liveViewers.get(liveId)) {
+      case (?viewers) {
+        let newViewers = viewers.filter(
+          func(user) { user != caller }
+        );
+        liveViewers.add(liveId, newViewers);
+      };
+      case (null) {};
+    };
+  };
+
+  public shared ({ caller }) func sendLiveMessage(liveId : Nat, text : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can send live messages");
+    };
+
+    if (not liveStreams.containsKey(liveId)) {
+      Runtime.trap("Live stream does not exist");
+    };
+
+    switch (profiles.get(caller)) {
+      case (?profile) {
+        let message = {
+          id = Time.now();
+          liveId;
+          userId = caller;
+          userName = profile.name;
+          text;
+          timestamp = Time.now();
+        };
+
+        let existingMessages = liveMessages.get(liveId).get(List.empty<LiveMessage>());
+        existingMessages.add(message);
+        liveMessages.add(liveId, existingMessages);
+      };
+      case (null) { Runtime.trap("Profile not found") };
+    };
+  };
+
+  public query ({ caller }) func getLiveMessages(liveId : Nat) : async [LiveMessage] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view live messages");
+    };
+    liveMessages.get(liveId).get(List.empty<LiveMessage>()).toArray();
+  };
+
+  public query ({ caller }) func getLiveViewers(liveId : Nat) : async [Profile] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view live viewers");
+    };
+
+    let resultList = List.empty<Profile>();
+
+    switch (liveViewers.get(liveId)) {
+      case (?viewers) {
+        for (userId in viewers.values()) {
+          switch (profiles.get(userId)) {
+            case (?profile) {
+              resultList.add(profile);
+            };
+            case (null) {};
+          };
+        };
+      };
+      case (null) {};
+    };
+    resultList.toArray();
+  };
+
+  public shared ({ caller }) func blockFromLive(liveId : Nat, userId : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can block from live streams");
+    };
+
+    switch (liveStreams.get(liveId)) {
+      case (?live) {
+        if (live.hostId != caller) {
+          Runtime.trap("Unauthorized: Only the host can block users");
+        };
+
+        let blockedUsers = blockedLiveUsers.get(liveId).get(Set.empty<Principal>());
+        blockedUsers.add(userId);
+        blockedLiveUsers.add(liveId, blockedUsers);
+
+        let remainingViewers = switch (liveViewers.get(liveId)) {
+          case (?viewers) {
+            viewers.filter(
+              func(u) { u != userId }
+            );
+          };
+          case (null) { Set.empty<Principal>() };
+        };
+        liveViewers.add(liveId, remainingViewers);
+      };
+      case (null) { Runtime.trap("Live stream not found") };
+    };
+  };
+
+  public shared ({ caller }) func addLiveReaction(liveId : Nat, emoji : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can react to live streams");
+    };
+
+    if (not liveStreams.containsKey(liveId)) {
+      Runtime.trap("Live does not exist");
+    };
+
+    let reaction : LiveReaction = {
+      liveId;
+      userId = caller;
+      emoji;
+      timestamp = Time.now();
+    };
+
+    let existingReactions = liveReactions.get(liveId).get(List.empty<LiveReaction>());
+    existingReactions.add(reaction);
+    liveReactions.add(liveId, existingReactions);
+  };
+
+  public query ({ caller }) func getLiveReactions(liveId : Nat) : async [LiveReaction] {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view live reactions");
+    };
+    liveReactions.get(liveId).get(List.empty<LiveReaction>()).toArray();
+  };
+
+  public shared ({ caller }) func setLiveFilter(liveId : Nat, filterSetting : LiveStreamFilter) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can set live filters");
+    };
+
+    switch (liveStreams.get(liveId)) {
+      case (null) { Runtime.trap("Live stream not found") };
+      case (?live) {
+        if (live.hostId != caller) {
+          Runtime.trap("Unauthorized: Only host can set filters");
+        };
+        liveStreams.add(liveId, { live with filterSetting });
+      };
     };
   };
 };

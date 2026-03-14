@@ -1,13 +1,17 @@
 import { MessageCircle } from "lucide-react";
+import { useState } from "react";
 import type { Profile } from "../backend";
-import { useMutualMatches } from "../hooks/useQueries";
+import { useMutualMatches, useSuperLikedBy } from "../hooks/useQueries";
 
 interface Props {
   onOpenChat: (p: Profile) => void;
+  onViewProfile?: (p: Profile) => void;
 }
 
-export default function MatchesPage({ onOpenChat }: Props) {
+export default function MatchesPage({ onOpenChat, onViewProfile }: Props) {
   const { data: matches = [], isLoading } = useMutualMatches();
+  const { data: superLikedBy = [] } = useSuperLikedBy();
+  const [superLikedExpanded, setSuperLikedExpanded] = useState(true);
 
   return (
     <div className="min-h-screen pt-14 pb-4" style={{ background: "#0a0010" }}>
@@ -17,6 +21,106 @@ export default function MatchesPage({ onOpenChat }: Props) {
           {matches.length} mutual matches
         </p>
       </div>
+
+      {/* Super Liked You section */}
+      {superLikedBy.length > 0 && (
+        <div className="px-5 mb-4">
+          <button
+            type="button"
+            onClick={() => setSuperLikedExpanded((v) => !v)}
+            data-ocid="matches.toggle"
+            className="w-full flex items-center justify-between p-3 rounded-2xl transition-all active:scale-[0.98]"
+            style={{
+              background:
+                "linear-gradient(135deg,oklch(0.18 0.1 60 / 0.3),oklch(0.18 0.08 300 / 0.3))",
+              border: "1px solid oklch(0.35 0.12 60 / 0.3)",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⭐</span>
+              <span className="text-white font-semibold text-sm">
+                Super Liked You
+              </span>
+              <span
+                className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+                style={{
+                  background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                }}
+              >
+                {superLikedBy.length}
+              </span>
+            </div>
+            <span className="text-white/50 text-sm">
+              {superLikedExpanded ? "▲" : "▼"}
+            </span>
+          </button>
+          {superLikedExpanded && (
+            <div className="mt-3 space-y-2">
+              {superLikedBy.map((profile, i) => (
+                <div
+                  key={profile.userId.toString()}
+                  data-ocid={`matches.item.${i + 1}`}
+                  className="flex items-center gap-3 p-3 rounded-2xl"
+                  style={{ background: "oklch(0.13 0.05 300)" }}
+                >
+                  <div className="relative flex-shrink-0">
+                    <div
+                      className="w-12 h-12 rounded-full overflow-hidden"
+                      style={{
+                        border: "2px solid",
+                        borderColor: "#f59e0b",
+                      }}
+                    >
+                      {profile.photoUrl ? (
+                        <img
+                          src={profile.photoUrl}
+                          alt={profile.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center text-white font-bold"
+                          style={{
+                            background:
+                              "linear-gradient(135deg,#f59e0b,#d97706)",
+                          }}
+                        >
+                          {profile.name.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 text-xs">
+                      ⭐
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold text-sm">
+                      {profile.name}
+                    </p>
+                    <p className="text-white/50 text-xs">
+                      {Number(profile.age)} • {profile.location}
+                    </p>
+                  </div>
+                  {onViewProfile && (
+                    <button
+                      type="button"
+                      onClick={() => onViewProfile(profile)}
+                      data-ocid={`matches.secondary_button.${i + 1}`}
+                      className="px-3 py-1.5 rounded-xl text-xs text-white font-medium flex-shrink-0"
+                      style={{
+                        background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                      }}
+                    >
+                      View
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {isLoading && (
         <div
           className="flex justify-center py-12"
@@ -31,7 +135,7 @@ export default function MatchesPage({ onOpenChat }: Props) {
           />
         </div>
       )}
-      {!isLoading && matches.length === 0 && (
+      {!isLoading && matches.length === 0 && superLikedBy.length === 0 && (
         <div className="text-center py-16" data-ocid="matches.empty_state">
           <p className="text-5xl mb-4">⭐</p>
           <p className="text-white/60 font-medium">No matches yet</p>
@@ -80,13 +184,13 @@ export default function MatchesPage({ onOpenChat }: Props) {
               </div>
             </div>
             <div className="p-3">
-              {profile.interests.slice(0, 2).map((i) => (
+              {profile.interests.slice(0, 2).map((interest) => (
                 <span
-                  key={i}
+                  key={interest}
                   className="text-xs px-2 py-0.5 rounded-full text-white mr-1 mb-1 inline-block"
                   style={{ background: "oklch(0.65 0.22 10 / 0.2)" }}
                 >
-                  {i}
+                  {interest}
                 </span>
               ))}
               <button

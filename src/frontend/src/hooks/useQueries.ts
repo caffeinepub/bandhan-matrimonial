@@ -786,3 +786,109 @@ export function useRecordStoryView() {
     },
   });
 }
+
+// --- Profile Views ---
+export function useProfileViewCount() {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint>({
+    queryKey: ["profileViewCount"],
+    queryFn: async () => {
+      if (!actor) return BigInt(0);
+      return actor.getProfileViewCount();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useProfileViewers() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Array<[Profile, bigint]>>({
+    queryKey: ["profileViewers"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getProfileViewers();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useRecordProfileView() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (userId: Principal) => {
+      if (!actor) return;
+      await actor.recordProfileView(userId);
+    },
+  });
+}
+
+// --- Super Like ---
+export function useHasSuperLiked(userId: Principal | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["hasSuperLiked", userId?.toString()],
+    queryFn: async () => {
+      if (!actor || !userId) return false;
+      return actor.hasSuperLiked(userId);
+    },
+    enabled: !!actor && !isFetching && !!userId,
+  });
+}
+
+export function useSuperLikeUser() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: Principal) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.superLikeUser(userId);
+    },
+    onSuccess: (_data, userId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["hasSuperLiked", userId.toString()],
+      });
+      queryClient.invalidateQueries({ queryKey: ["superLikedBy"] });
+    },
+  });
+}
+
+export function useUnsuperLikeUser() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: Principal) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.unsuperLikeUser(userId);
+    },
+    onSuccess: (_data, userId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["hasSuperLiked", userId.toString()],
+      });
+      queryClient.invalidateQueries({ queryKey: ["superLikedBy"] });
+    },
+  });
+}
+
+export function useSuperLikedBy() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Profile[]>({
+    queryKey: ["superLikedBy"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getSuperLikedBy();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useSuperLikeNotifications() {
+  const { actor, isFetching } = useActor();
+  return useQuery<import("../backend").SuperLikeNotification[]>({
+    queryKey: ["superLikeNotifications"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getSuperLikeNotifications();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}

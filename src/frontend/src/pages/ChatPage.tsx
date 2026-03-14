@@ -1,4 +1,5 @@
-import { Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Search } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Profile } from "../backend";
 import StoryViewerModal from "../components/StoryViewerModal";
@@ -9,6 +10,17 @@ interface Props {
   onOpenConversation: (p: Profile) => void;
 }
 
+// Online indicator: show green dot for every 3rd profile (index % 3 === 0)
+function OnlineDot({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span
+      className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-400"
+      style={{ border: "2px solid #0a0010" }}
+    />
+  );
+}
+
 export default function ChatPage({ onOpenConversation }: Props) {
   const { data: matches = [], isLoading } = useMutualMatches();
   const { data: stories = [] } = useStories();
@@ -17,6 +29,7 @@ export default function ChatPage({ onOpenConversation }: Props) {
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(
     null,
   );
+  const [chatSearch, setChatSearch] = useState("");
   const storyFileRef = useRef<HTMLInputElement>(null);
 
   const handleAddStory = () => {
@@ -36,6 +49,12 @@ export default function ChatPage({ onOpenConversation }: Props) {
     // reset input
     e.target.value = "";
   };
+
+  const filteredMatches = chatSearch.trim()
+    ? matches.filter((p) =>
+        p.name.toLowerCase().includes(chatSearch.toLowerCase()),
+      )
+    : matches;
 
   return (
     <div className="min-h-screen pt-14 pb-4" style={{ background: "#0a0010" }}>
@@ -120,6 +139,25 @@ export default function ChatPage({ onOpenConversation }: Props) {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="px-5 mb-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+          <Input
+            type="text"
+            placeholder="Search conversations..."
+            value={chatSearch}
+            onChange={(e) => setChatSearch(e.target.value)}
+            data-ocid="chat.search_input"
+            className="pl-9 h-10 text-sm text-white placeholder:text-white/30 rounded-xl"
+            style={{
+              background: "oklch(0.13 0.05 300)",
+              border: "1px solid oklch(0.22 0.06 300)",
+            }}
+          />
+        </div>
+      </div>
+
       {/* Chats */}
       {isLoading && (
         <div
@@ -144,8 +182,15 @@ export default function ChatPage({ onOpenConversation }: Props) {
           </p>
         </div>
       )}
+      {!isLoading && matches.length > 0 && filteredMatches.length === 0 && (
+        <div className="text-center py-8" data-ocid="chat.empty_state">
+          <p className="text-white/40 text-sm">
+            No matches found for "{chatSearch}"
+          </p>
+        </div>
+      )}
       <div className="px-5 space-y-1">
-        {matches.map((profile, i) => (
+        {filteredMatches.map((profile, i) => (
           <button
             key={profile.userId.toString()}
             type="button"
@@ -154,29 +199,32 @@ export default function ChatPage({ onOpenConversation }: Props) {
             className="w-full flex items-center gap-3 p-3 rounded-2xl transition-all active:scale-[0.98]"
             style={{ background: "oklch(0.13 0.05 300)" }}
           >
-            <div
-              className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center"
-              style={{
-                background: "linear-gradient(135deg,#e11d48,#7c3aed)",
-                padding: 2,
-              }}
-            >
+            <div className="relative flex-shrink-0">
               <div
-                className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
-                style={{ background: "#1a0a1e" }}
+                className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center"
+                style={{
+                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                  padding: 2,
+                }}
               >
-                {profile.photoUrl ? (
-                  <img
-                    src={profile.photoUrl}
-                    alt={profile.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-white font-bold text-xl">
-                    {profile.name.charAt(0)}
-                  </span>
-                )}
+                <div
+                  className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+                  style={{ background: "#1a0a1e" }}
+                >
+                  {profile.photoUrl ? (
+                    <img
+                      src={profile.photoUrl}
+                      alt={profile.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white font-bold text-xl">
+                      {profile.name.charAt(0)}
+                    </span>
+                  )}
+                </div>
               </div>
+              <OnlineDot show={i % 3 === 0} />
             </div>
             <div className="flex-1 text-left min-w-0">
               <p className="text-white font-semibold text-sm">{profile.name}</p>

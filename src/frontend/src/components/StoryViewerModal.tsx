@@ -538,7 +538,7 @@ function StoryContent({
       </div>
 
       {/* Bottom content */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4 flex flex-col gap-2">
+      <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-24 flex flex-col gap-2">
         {cleanCaption && (
           <p className="text-white/90 text-sm text-center drop-shadow">
             {cleanCaption}

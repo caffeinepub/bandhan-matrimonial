@@ -39,6 +39,34 @@ export type CallType = { 'video' : null } |
 export type Gender = { 'other' : null } |
   { 'female' : null } |
   { 'male' : null };
+export interface LiveMessage {
+  'id' : bigint,
+  'userName' : string,
+  'userId' : Principal,
+  'text' : string,
+  'timestamp' : bigint,
+  'liveId' : bigint,
+}
+export interface LiveReaction {
+  'userId' : Principal,
+  'emoji' : string,
+  'timestamp' : bigint,
+  'liveId' : bigint,
+}
+export interface LiveStream {
+  'id' : bigint,
+  'title' : string,
+  'startedAt' : bigint,
+  'matchesOnly' : boolean,
+  'hostName' : string,
+  'isActive' : boolean,
+  'hostId' : Principal,
+  'hostPhoto' : [] | [string],
+  'filterSetting' : LiveStreamFilter,
+}
+export type LiveStreamFilter = { 'all' : null } |
+  { 'gender' : Gender } |
+  { 'religion' : string };
 export interface MessageWithMeta {
   'id' : bigint,
   'isDeleted' : boolean,
@@ -110,6 +138,10 @@ export interface StoryNotification {
   'actorUserId' : Principal,
   'timestamp' : bigint,
 }
+export interface SuperLikeNotification {
+  'fromProfile' : Profile,
+  'timestamp' : bigint,
+}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
@@ -142,6 +174,7 @@ export interface _SERVICE {
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'acceptMatchRequest' : ActorMethod<[Principal], undefined>,
+  'addLiveReaction' : ActorMethod<[bigint, string], undefined>,
   'addStory' : ActorMethod<[string, string], undefined>,
   'addStoryComment' : ActorMethod<[bigint, string], undefined>,
   'addStoryReaction' : ActorMethod<[bigint, string], undefined>,
@@ -149,6 +182,7 @@ export interface _SERVICE {
   'adminDeleteStory' : ActorMethod<[bigint], undefined>,
   'adminGetAllStories' : ActorMethod<[], Array<Story>>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'blockFromLive' : ActorMethod<[bigint, Principal], undefined>,
   'consumeCallSignals' : ActorMethod<[Principal], Array<CallSignal>>,
   'createOrUpdateProfile' : ActorMethod<
     [
@@ -180,12 +214,18 @@ export interface _SERVICE {
   'deleteMessage' : ActorMethod<[bigint], undefined>,
   'deleteStory' : ActorMethod<[bigint], undefined>,
   'editMessage' : ActorMethod<[bigint, string], undefined>,
+  'endLive' : ActorMethod<[bigint], undefined>,
+  'getActiveLives' : ActorMethod<[], Array<LiveStream>>,
   'getAllProfiles' : ActorMethod<[], Array<Profile>>,
   'getAllWithRequestedCount' : ActorMethod<[], Array<[Profile, bigint]>>,
   'getCallHistory' : ActorMethod<[], Array<[CallHistory, Profile]>>,
   'getCallerStoryReaction' : ActorMethod<[bigint], [] | [string]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [Profile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getDailySuggestions' : ActorMethod<[], Array<Profile>>,
+  'getLiveMessages' : ActorMethod<[bigint], Array<LiveMessage>>,
+  'getLiveReactions' : ActorMethod<[bigint], Array<LiveReaction>>,
+  'getLiveViewers' : ActorMethod<[bigint], Array<Profile>>,
   'getMatchRequests' : ActorMethod<
     [],
     Array<
@@ -199,38 +239,56 @@ export interface _SERVICE {
   >,
   'getMessages' : ActorMethod<[Principal], Array<MessageWithMeta>>,
   'getMutualMatches' : ActorMethod<[], Array<Profile>>,
+  'getMyNotifications' : ActorMethod<
+    [],
+    [Array<StoryNotification>, Array<SuperLikeNotification>]
+  >,
   'getMyStoryNotifications' : ActorMethod<[], Array<StoryNotification>>,
   'getPremiumStatus' : ActorMethod<[], boolean>,
   'getPrivacyVisibility' : ActorMethod<[], PrivacyVisibility>,
+  'getProfileViewCount' : ActorMethod<[], bigint>,
+  'getProfileViewers' : ActorMethod<[], Array<[Profile, bigint]>>,
   'getShowLastActive' : ActorMethod<[], boolean>,
   'getStories' : ActorMethod<[], Array<Story>>,
   'getStoryComments' : ActorMethod<[bigint], Array<StoryComment>>,
   'getStoryReactions' : ActorMethod<[bigint], Array<[string, bigint]>>,
   'getStoryViewCount' : ActorMethod<[bigint], bigint>,
   'getStoryViewers' : ActorMethod<[bigint], Array<Profile>>,
+  'getSuperLikeNotifications' : ActorMethod<[], Array<SuperLikeNotification>>,
+  'getSuperLikedBy' : ActorMethod<[], Array<Profile>>,
   'getTypingStatus' : ActorMethod<[Principal], boolean>,
   'getUserProfile' : ActorMethod<[Principal], [] | [Profile]>,
   'hasLikedStory' : ActorMethod<[bigint], boolean>,
+  'hasSuperLiked' : ActorMethod<[Principal], boolean>,
   'isAdmin' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'joinLive' : ActorMethod<[bigint], undefined>,
+  'leaveLive' : ActorMethod<[bigint], undefined>,
   'likeStory' : ActorMethod<[bigint], undefined>,
   'logCall' : ActorMethod<[Principal, CallType, bigint, CallStatus], undefined>,
   'markMessageRead' : ActorMethod<[bigint], undefined>,
   'reactToMessage' : ActorMethod<[bigint, string], undefined>,
+  'recordProfileView' : ActorMethod<[Principal], undefined>,
   'recordStoryView' : ActorMethod<[bigint], undefined>,
   'replyToStoryComment' : ActorMethod<[bigint, bigint, string], undefined>,
+  'saveCallerUserProfile' : ActorMethod<[Profile], undefined>,
   'searchProfiles' : ActorMethod<[string], Array<Profile>>,
+  'sendLiveMessage' : ActorMethod<[bigint, string], undefined>,
   'sendMatchRequest' : ActorMethod<[Principal], undefined>,
   'sendMessage' : ActorMethod<[Principal, string], undefined>,
+  'setLiveFilter' : ActorMethod<[bigint, LiveStreamFilter], undefined>,
   'setPremiumStatus' : ActorMethod<[boolean], undefined>,
   'setPrivacyVisibility' : ActorMethod<[PrivacyVisibility], undefined>,
   'setShowLastActive' : ActorMethod<[boolean], undefined>,
   'setTyping' : ActorMethod<[Principal, boolean], undefined>,
+  'startLive' : ActorMethod<[string, boolean], bigint>,
   'storeCallSignal' : ActorMethod<
     [Principal, CallSignalType, string, CallType],
     undefined
   >,
+  'superLikeUser' : ActorMethod<[Principal], undefined>,
   'unlikeStory' : ActorMethod<[bigint], undefined>,
+  'unsuperLikeUser' : ActorMethod<[Principal], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -1,10 +1,15 @@
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Profile, StoryNotification } from "../backend";
+import type {
+  Profile,
+  StoryNotification,
+  SuperLikeNotification,
+} from "../backend";
 import {
   useMatchRequests,
   useMutualMatches,
   useStoryNotifications,
+  useSuperLikeNotifications,
 } from "../hooks/useQueries";
 import {
   NOTIF_HISTORY_KEY,
@@ -26,6 +31,14 @@ interface StoryNotifItem {
   type: "story_like" | "story_comment" | "story_reply";
   profileName: string;
   profilePhoto?: string;
+  text: string;
+  timestamp: number;
+}
+
+interface SuperLikeItem {
+  id: string;
+  name: string;
+  photo?: string;
   text: string;
   timestamp: number;
 }
@@ -128,6 +141,8 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     useMutualMatches();
   const { data: storyNotificationsRaw = [], refetch: refetchStoryNotifs } =
     useStoryNotifications();
+  const { data: superLikeNotifsRaw = [], refetch: refetchSuperLikes } =
+    useSuperLikeNotifications();
 
   // Poll every 5 seconds
   useEffect(() => {
@@ -135,9 +150,10 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
       refetchRequests();
       refetchMatches();
       refetchStoryNotifs();
+      refetchSuperLikes();
     }, 5000);
     return () => clearInterval(interval);
-  }, [refetchRequests, refetchMatches, refetchStoryNotifs]);
+  }, [refetchRequests, refetchMatches, refetchStoryNotifs, refetchSuperLikes]);
 
   // Build match/mutual notifications
   const notifications: Notification[] = [
@@ -147,7 +163,7 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
         id: `req_${profile.userId.toString()}`,
         type: "match_request" as const,
         profile,
-        text: `${profile.name} wants to connect 💕`,
+        text: `${profile.name} wants to connect \uD83D\uDC95`,
         timestamp:
           notifTimestamps[`req_${profile.userId.toString()}`] ?? Date.now(),
       })),
@@ -155,7 +171,7 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
       id: `match_${profile.userId.toString()}`,
       type: "mutual_match" as const,
       profile,
-      text: `You matched with ${profile.name}! 🎉`,
+      text: `You matched with ${profile.name}! \uD83C\uDF89`,
       timestamp:
         notifTimestamps[`match_${profile.userId.toString()}`] ?? Date.now(),
     })),
@@ -170,6 +186,17 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
       ? (n.actorPhoto[0] ?? undefined)
       : (n.actorPhoto ?? undefined),
     text: n.text,
+    timestamp: Number(n.timestamp / 1_000_000n),
+  }));
+
+  // Build super like items
+  const superLikeItems: SuperLikeItem[] = (
+    superLikeNotifsRaw as SuperLikeNotification[]
+  ).map((n) => ({
+    id: `superlike_${n.fromProfile.userId.toString()}`,
+    name: n.fromProfile.name,
+    photo: n.fromProfile.photoUrl ?? undefined,
+    text: `\u2B50 ${n.fromProfile.name} Super Liked you!`,
     timestamp: Number(n.timestamp / 1_000_000n),
   }));
 
@@ -199,7 +226,10 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
 
   const matchUnread = notifications.filter((n) => !seenIds.has(n.id)).length;
   const storyUnread = storyNotifItems.filter((n) => !seenIds.has(n.id)).length;
-  const unreadCount = matchUnread + storyUnread;
+  const superLikeUnread = superLikeItems.filter(
+    (n) => !seenIds.has(n.id),
+  ).length;
+  const unreadCount = matchUnread + storyUnread + superLikeUnread;
 
   const handleOpen = () => {
     setOpen((prev) => !prev);
@@ -207,6 +237,7 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     const allIds = [
       ...notifications.map((n) => n.id),
       ...storyNotifItems.map((n) => n.id),
+      ...superLikeItems.map((n) => n.id),
     ];
     const newSeen = new Set([...seenIds, ...allIds]);
     setSeenIds(newSeen);
@@ -235,22 +266,26 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Combined list for dropdown (sorted by timestamp descending)
-  const allDropdownItems: Array<{
+  // Combined list for dropdown (sorted by timestamp descending, max 5)
+  type DropdownItem = {
     id: string;
     name: string;
     photo?: string;
     text: string;
     timestamp: number;
     emoji: string;
-  }> = [
+    isSuperLike?: boolean;
+  };
+
+  const allDropdownItems: DropdownItem[] = [
     ...notifications.map((n) => ({
       id: n.id,
       name: n.profile.name,
       photo: n.profile.photoUrl ?? undefined,
       text: n.text,
       timestamp: notifTimestamps[n.id] ?? Date.now(),
-      emoji: n.type === "match_request" ? "💕" : "🎉",
+      emoji: n.type === "match_request" ? "\uD83D\uDC95" : "\uD83C\uDF89",
+      isSuperLike: false,
     })),
     ...storyNotifItems.map((n) => ({
       id: n.id,
@@ -258,9 +293,21 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
       photo: n.profilePhoto,
       text: n.text,
       timestamp: n.timestamp,
-      emoji: n.type === "story_like" ? "❤️" : "💬",
+      emoji: n.type === "story_like" ? "\u2764\uFE0F" : "\uD83D\uDCAC",
+      isSuperLike: false,
     })),
-  ].sort((a, b) => b.timestamp - a.timestamp);
+    ...superLikeItems.map((n) => ({
+      id: n.id,
+      name: n.name,
+      photo: n.photo,
+      text: n.text,
+      timestamp: n.timestamp,
+      emoji: "\u2B50",
+      isSuperLike: true,
+    })),
+  ]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 5);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -311,7 +358,7 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
               className="py-10 text-center"
               data-ocid="notifications.empty_state"
             >
-              <p className="text-3xl mb-2">🔔</p>
+              <p className="text-3xl mb-2">\uD83D\uDD14</p>
               <p className="text-white/40 text-sm">No notifications yet</p>
             </div>
           ) : (
@@ -322,10 +369,17 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
                   data-ocid={`notifications.item.${idx + 1}`}
                   className="flex items-center gap-3 px-4 py-3 transition-colors"
                   style={{
-                    background: seenIds.has(n.id)
-                      ? "transparent"
-                      : "oklch(0.16 0.07 300 / 0.5)",
+                    background: n.isSuperLike
+                      ? seenIds.has(n.id)
+                        ? "rgba(245,158,11,0.05)"
+                        : "rgba(245,158,11,0.15)"
+                      : seenIds.has(n.id)
+                        ? "transparent"
+                        : "oklch(0.16 0.07 300 / 0.5)",
                     borderBottom: "1px solid oklch(0.18 0.05 300)",
+                    borderLeft: n.isSuperLike
+                      ? "3px solid #f59e0b"
+                      : "3px solid transparent",
                   }}
                 >
                   {/* Avatar */}
@@ -350,7 +404,14 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-white/90 text-sm leading-snug">
+                    <p
+                      className="text-sm leading-snug"
+                      style={{
+                        color: n.isSuperLike
+                          ? "#fbbf24"
+                          : "rgba(255,255,255,0.9)",
+                      }}
+                    >
                       {n.text}
                     </p>
                     <p className="text-white/40 text-xs mt-0.5">
@@ -364,7 +425,11 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
                     {!seenIds.has(n.id) && (
                       <div
                         className="w-2 h-2 rounded-full"
-                        style={{ background: "oklch(0.65 0.22 10)" }}
+                        style={{
+                          background: n.isSuperLike
+                            ? "#f59e0b"
+                            : "oklch(0.65 0.22 10)",
+                        }}
                       />
                     )}
                   </div>

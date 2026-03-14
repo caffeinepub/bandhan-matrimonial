@@ -1,6 +1,8 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -8,6 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Camera,
@@ -19,23 +27,31 @@ import {
   Lock,
   LogOut,
   PhoneCall,
+  Rocket,
   Save,
   Shield,
+  Star,
   Upload,
+  Users,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Gender } from "../backend";
 import GalleryLightbox from "../components/GalleryLightbox";
+import StoryViewerModal from "../components/StoryViewerModal";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useCallerProfile,
   useCreateProfile,
   usePremiumStatus,
   usePrivacyVisibility,
+  useProfileViewCount,
+  useProfileViewers,
   useSetPremiumStatus,
   useSetPrivacyVisibility,
   useSetShowLastActive,
   useShowLastActive,
+  useStories,
+  useSuperLikedBy,
 } from "../hooks/useQueries";
 import type { PrivacyVisibility } from "../hooks/useQueries";
 import { useStorageUpload } from "../hooks/useStorageUpload";
@@ -91,8 +107,14 @@ type VisibilityOption = "everyone" | "matches" | "hidden";
 
 interface MyProfilePageProps {
   onCallHistory?: () => void;
+  onGoLive?: () => void;
+  onSuggestions?: () => void;
 }
-export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
+export default function MyProfilePage({
+  onCallHistory,
+  onGoLive,
+  onSuggestions,
+}: MyProfilePageProps) {
   const { data: profile, isLoading } = useCallerProfile();
   const createProfile = useCreateProfile();
   const { clear: logout } = useInternetIdentity();
@@ -101,6 +123,65 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showViewers, setShowViewers] = useState(false);
+  const [showSuperLikedBy, setShowSuperLikedBy] = useState(false);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [storyViewerIndex, setStoryViewerIndex] = useState(0);
+
+  // New feature hooks
+  const { data: profileViewCount = BigInt(0) } = useProfileViewCount();
+  const { data: profileViewers = [] } = useProfileViewers();
+  const { data: superLikedBy = [] } = useSuperLikedBy();
+  const { data: allStories = [] } = useStories();
+
+  // Profile boost state (localStorage-based)
+  const [boostExpiry, setBoostExpiry] = useState<number | null>(() => {
+    const stored = localStorage.getItem("bandhan_boost_expiry");
+    if (stored) {
+      const val = Number(stored);
+      return val > Date.now() ? val : null;
+    }
+    return null;
+  });
+  const [boostNow, setBoostNow] = useState(Date.now());
+  // Tick boost timer every second
+  useEffect(() => {
+    if (!boostExpiry) return;
+    const interval = setInterval(() => {
+      setBoostNow(Date.now());
+      if (Date.now() >= boostExpiry) {
+        setBoostExpiry(null);
+        localStorage.removeItem("bandhan_boost_expiry");
+        clearInterval(interval);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [boostExpiry]);
+
+  const handleBoost = () => {
+    const expiry = Date.now() + 30 * 60 * 1000;
+    setBoostExpiry(expiry);
+    setBoostNow(Date.now());
+    localStorage.setItem("bandhan_boost_expiry", String(expiry));
+  };
+
+  const boostRemaining = boostExpiry ? Math.max(0, boostExpiry - boostNow) : 0;
+  const boostMins = Math.floor(boostRemaining / 60000);
+  const boostSecs = Math.floor((boostRemaining % 60000) / 1000);
+  const isBoosted = boostExpiry !== null && boostRemaining > 0;
+
+  // My highlights (stories with localStorage highlight flag)
+  const myHighlights = allStories.filter((s) => {
+    try {
+      const key = `story_highlights_${s.userId.toString()}`;
+      const stored = localStorage.getItem(key);
+      if (!stored) return false;
+      const ids: string[] = JSON.parse(stored);
+      return ids.includes(s.id.toString());
+    } catch {
+      return false;
+    }
+  });
   const photoFileRef = useRef<HTMLInputElement>(null);
   const mediaFileRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -319,6 +400,41 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
     ? ([p.photoUrl, ...p.mediaUrls].filter(Boolean) as string[])
     : [];
 
+  // Profile completion
+  const completionFields = p
+    ? ([
+        ["Name", !!p.name],
+        ["Age", !!p.age],
+        ["Bio", !!p.bio],
+        ["Photo", !!p.photoUrl],
+        ["Occupation", !!p.occupation],
+        ["Height", !!p.height],
+        ["Religion", !!p.religion],
+        ["Location", !!p.location],
+        ["Mother Tongue", !!p.motherTongue],
+        ["Marital Status", !!p.maritalStatus],
+        ["Education", !!p.education],
+        ["Interests", p.interests.length > 0],
+        ["Hobbies", p.hobbies.length > 0],
+        ["Gallery", p.mediaUrls.length > 0],
+        ["Movies", p.favoriteMovies.length > 0],
+        ["Songs", p.favoriteSongs.length > 0],
+        ["Thoughts", !!p.thoughts],
+        ["Mood", !!p.mood],
+        ["About Me", !!p.aboutMe],
+        ["Phone", !!(p as any).phone],
+      ] as [string, boolean][])
+    : [];
+  const filledCount = completionFields.filter(([, v]) => v).length;
+  const completionPct =
+    completionFields.length > 0
+      ? Math.round((filledCount / completionFields.length) * 100)
+      : 0;
+  const missingFields = completionFields
+    .filter(([, v]) => !v)
+    .map(([k]) => k)
+    .slice(0, 3);
+
   return (
     <div className="min-h-screen pb-8" style={{ background: "#0a0010" }}>
       {/* Hidden inputs */}
@@ -430,6 +546,35 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
+          {onGoLive && (
+            <button
+              type="button"
+              onClick={onGoLive}
+              data-ocid="myprofile.primary_button"
+              className="px-3 py-2 rounded-full flex items-center gap-1.5 text-sm font-bold text-white"
+              style={{
+                background: "linear-gradient(135deg,#e11d48,#dc2626)",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              Go Live
+            </button>
+          )}
+          {onSuggestions && (
+            <button
+              type="button"
+              onClick={onSuggestions}
+              data-ocid="myprofile.secondary_button"
+              className="px-3 py-2 rounded-full flex items-center gap-1.5 text-sm font-medium text-white"
+              style={{
+                background: "rgba(124,58,237,0.6)",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              ✨ Suggestions
+            </button>
+          )}
         </div>
         {p && (
           <div className="absolute bottom-4 left-5">
@@ -442,6 +587,179 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
       </div>
 
       <div className="px-5 space-y-5 mt-4">
+        {/* Profile Completion Bar */}
+        {p && completionPct < 100 && (
+          <div
+            className="rounded-2xl p-4"
+            style={{
+              background: "oklch(0.13 0.05 300)",
+              border: "1px solid oklch(0.22 0.07 300)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-white/70 text-sm font-semibold">
+                Profile {completionPct}% complete
+              </span>
+              <span
+                className="text-xs"
+                style={{
+                  color:
+                    completionPct >= 80
+                      ? "#4ade80"
+                      : completionPct >= 50
+                        ? "#fbbf24"
+                        : "#fb7185",
+                }}
+              >
+                {completionPct >= 80
+                  ? "Almost there!"
+                  : completionPct >= 50
+                    ? "Good progress"
+                    : "Just starting"}
+              </span>
+            </div>
+            <div
+              className="w-full h-2 rounded-full overflow-hidden"
+              style={{ background: "oklch(0.2 0.05 300)" }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${completionPct}%`,
+                  background: "linear-gradient(90deg,#e11d48,#7c3aed)",
+                }}
+              />
+            </div>
+            {missingFields.length > 0 && (
+              <p className="text-white/40 text-xs mt-2">
+                Add: {missingFields.join(", ")} to complete your profile
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Stats Row: Views, Super Liked, Boost */}
+        {p && (
+          <div className="grid grid-cols-3 gap-2">
+            {/* Profile Views */}
+            <button
+              type="button"
+              onClick={() => setShowViewers(true)}
+              data-ocid="myprofile.button"
+              className="rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95"
+              style={{
+                background: "oklch(0.14 0.05 300)",
+                border: "1px solid oklch(0.22 0.07 300)",
+              }}
+            >
+              <Users className="w-5 h-5" style={{ color: "#a78bfa" }} />
+              <span className="text-white font-bold text-lg leading-none">
+                {Number(profileViewCount)}
+              </span>
+              <span className="text-white/50 text-[10px]">Profile Views</span>
+            </button>
+
+            {/* Super Liked By */}
+            <button
+              type="button"
+              onClick={() => setShowSuperLikedBy(true)}
+              data-ocid="myprofile.button"
+              className="rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95"
+              style={{
+                background: "oklch(0.14 0.05 300)",
+                border: "1px solid oklch(0.22 0.07 300)",
+              }}
+            >
+              <Star
+                className="w-5 h-5"
+                style={{ color: "#fbbf24", fill: "#fbbf24" }}
+              />
+              <span className="text-white font-bold text-lg leading-none">
+                {superLikedBy.length}
+              </span>
+              <span className="text-white/50 text-[10px]">Super Liked</span>
+            </button>
+
+            {/* Boost */}
+            <button
+              type="button"
+              onClick={isBoosted ? undefined : handleBoost}
+              data-ocid="myprofile.button"
+              className="rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95"
+              style={{
+                background: isBoosted
+                  ? "linear-gradient(135deg,oklch(0.25 0.12 280),oklch(0.2 0.1 270))"
+                  : "oklch(0.14 0.05 300)",
+                border: isBoosted
+                  ? "1px solid oklch(0.5 0.15 280 / 0.5)"
+                  : "1px solid oklch(0.22 0.07 300)",
+              }}
+            >
+              <Rocket
+                className="w-5 h-5"
+                style={{ color: isBoosted ? "#c084fc" : "#6b7280" }}
+              />
+              {isBoosted ? (
+                <>
+                  <span className="text-white font-bold text-sm leading-none">
+                    {boostMins}:{boostSecs.toString().padStart(2, "0")}
+                  </span>
+                  <span className="text-white/50 text-[10px]">Boosted 🚀</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-white/60 text-sm leading-none font-medium">
+                    Boost
+                  </span>
+                  <span className="text-white/40 text-[10px]">30 min</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Story Highlights Row */}
+        {myHighlights.length > 0 && (
+          <div>
+            <p className="text-white/60 text-xs uppercase tracking-wider mb-3">
+              Highlights
+            </p>
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {myHighlights.map((story, i) => (
+                <button
+                  key={story.id.toString()}
+                  type="button"
+                  data-ocid={`myprofile.item.${i + 1}`}
+                  onClick={() => {
+                    setStoryViewerIndex(
+                      allStories.findIndex((s) => s.id === story.id),
+                    );
+                    setStoryViewerOpen(true);
+                  }}
+                  className="flex-shrink-0 flex flex-col items-center gap-1.5"
+                >
+                  <div
+                    className="w-14 h-14 rounded-full overflow-hidden"
+                    style={{
+                      border: "2px solid",
+                      borderColor: "oklch(0.65 0.22 10)",
+                    }}
+                  >
+                    <img
+                      src={story.imageUrl}
+                      alt={story.caption}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <span className="text-white/50 text-[9px] truncate w-14 text-center">
+                    {story.caption || "Story"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Privacy & Premium settings toggle */}
         <button
           type="button"
@@ -1027,8 +1345,148 @@ export default function MyProfilePage({ onCallHistory }: MyProfilePageProps) {
           onClose={() => setLightboxOpen(false)}
         />
       )}
+
+      {/* Profile Viewers Sheet */}
+      <Sheet open={showViewers} onOpenChange={setShowViewers}>
+        <SheetContent
+          side="bottom"
+          data-ocid="myprofile.sheet"
+          className="rounded-t-3xl border-0 pb-8"
+          style={{
+            background: "#0a0010",
+            maxHeight: "75vh",
+            overflowY: "auto",
+          }}
+        >
+          <SheetHeader className="mb-4">
+            <SheetTitle className="text-white text-lg">
+              👁 Profile Viewers ({Number(profileViewCount)})
+            </SheetTitle>
+          </SheetHeader>
+          {profileViewers.length === 0 ? (
+            <div className="text-center py-8" data-ocid="myprofile.empty_state">
+              <p className="text-white/40 text-sm">No views yet</p>
+              <p className="text-white/30 text-xs mt-1">
+                Only matches who viewed you appear here
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {profileViewers.map(([viewer, ts], i) => (
+                <div
+                  key={viewer.userId.toString()}
+                  data-ocid={`myprofile.item.${i + 1}`}
+                  className="flex items-center gap-3 px-1"
+                >
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={viewer.photoUrl ?? ""} />
+                    <AvatarFallback
+                      style={{
+                        background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                      }}
+                    >
+                      {viewer.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="text-white font-medium text-sm">
+                      {viewer.name}, {Number(viewer.age)}
+                    </p>
+                    <p className="text-white/40 text-xs">
+                      📍 {viewer.location}
+                    </p>
+                  </div>
+                  <span className="text-white/30 text-xs">
+                    {timeAgo(Number(ts))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Super Liked By Sheet */}
+      <Sheet open={showSuperLikedBy} onOpenChange={setShowSuperLikedBy}>
+        <SheetContent
+          side="bottom"
+          data-ocid="myprofile.sheet"
+          className="rounded-t-3xl border-0 pb-8"
+          style={{
+            background: "#0a0010",
+            maxHeight: "75vh",
+            overflowY: "auto",
+          }}
+        >
+          <SheetHeader className="mb-4">
+            <SheetTitle className="text-white text-lg">
+              ⭐ Super Liked By ({superLikedBy.length})
+            </SheetTitle>
+          </SheetHeader>
+          {superLikedBy.length === 0 ? (
+            <div className="text-center py-8" data-ocid="myprofile.empty_state">
+              <p className="text-white/40 text-sm">No super likes yet</p>
+              <p className="text-white/30 text-xs mt-1">
+                When someone super likes you, they appear here
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {superLikedBy.map((viewer, i) => (
+                <div
+                  key={viewer.userId.toString()}
+                  data-ocid={`myprofile.item.${i + 1}`}
+                  className="flex items-center gap-3 px-1"
+                >
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={viewer.photoUrl ?? ""} />
+                    <AvatarFallback
+                      style={{
+                        background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                      }}
+                    >
+                      {viewer.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="text-white font-medium text-sm">
+                      {viewer.name}, {Number(viewer.age)}
+                    </p>
+                    <p className="text-white/40 text-xs">
+                      📍 {viewer.location}
+                    </p>
+                  </div>
+                  <Star
+                    className="w-4 h-4 flex-shrink-0"
+                    style={{ color: "#fbbf24", fill: "#fbbf24" }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Story Viewer Modal for Highlights */}
+      {storyViewerOpen && allStories.length > 0 && (
+        <StoryViewerModal
+          stories={allStories}
+          initialIndex={storyViewerIndex >= 0 ? storyViewerIndex : 0}
+          onClose={() => setStoryViewerOpen(false)}
+        />
+      )}
     </div>
   );
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function Section({

@@ -15,7 +15,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Heart, Search, SlidersHorizontal, X } from "lucide-react";
+import { Heart, Search, SlidersHorizontal, Star, X } from "lucide-react";
 import { useState } from "react";
 import type { Profile } from "../backend";
 import NotificationBell from "../components/NotificationBell";
@@ -23,6 +23,8 @@ import {
   useAllProfiles,
   useCallerProfile,
   useSendMatchRequest,
+  useSuperLikeUser,
+  useUnsuperLikeUser,
 } from "../hooks/useQueries";
 import { playMatchSentSound } from "../hooks/useSound";
 
@@ -128,12 +130,23 @@ function applyFilters(
 interface Props {
   onViewProfile: (p: Profile) => void;
   onNotifications: () => void;
+  onGoLive?: () => void;
 }
 
-export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
+export default function BrowsePage({
+  onViewProfile,
+  onNotifications,
+  onGoLive,
+}: Props) {
   const { data: allProfiles = [], isLoading } = useAllProfiles();
   const { data: myProfile } = useCallerProfile();
   const sendRequest = useSendMatchRequest();
+  const superLikeMutation = useSuperLikeUser();
+  const unsuperLikeMutation = useUnsuperLikeUser();
+  const [superLiked, setSuperLiked] = useState<Set<string>>(new Set());
+  const [cardReactions, setCardReactions] = useState<Record<string, string>>(
+    {},
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -213,6 +226,24 @@ export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
     setSkipped((prev) => new Set([...prev, p.userId.toString()]));
   };
 
+  const handleSuperLike = async (p: Profile) => {
+    const id = p.userId.toString();
+    const isSuperLiked = superLiked.has(id);
+    setSuperLiked((prev) => {
+      const next = new Set(prev);
+      if (isSuperLiked) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    try {
+      if (isSuperLiked) {
+        await unsuperLikeMutation.mutateAsync(p.userId);
+      } else {
+        await superLikeMutation.mutateAsync(p.userId);
+      }
+    } catch {}
+  };
+
   const openFilter = () => {
     setPendingFilters(filters);
     setFilterOpen(true);
@@ -278,6 +309,18 @@ export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onGoLive && (
+            <button
+              type="button"
+              data-ocid="browse.primary_button"
+              onClick={onGoLive}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-white"
+              style={{ background: "#e11d48" }}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              LIVE
+            </button>
+          )}
           <NotificationBell onViewAll={onNotifications} />
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center"
@@ -717,6 +760,19 @@ export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
                   "linear-gradient(to top,rgba(10,0,16,0.95) 0%,transparent 60%)",
               }}
             />
+            {/* Online indicator on main card */}
+            {filtered.indexOf(currentProfile) % 3 === 0 && (
+              <div
+                className="absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold text-white"
+                style={{
+                  background: "rgba(0,0,0,0.5)",
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                Online
+              </div>
+            )}
             {/* Premium badge */}
             {isPremiumProfile(currentProfile) && (
               <div
@@ -756,10 +812,63 @@ export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
                       {i}
                     </span>
                   ))}
+                  {(() => {
+                    const mutual = myProfile
+                      ? currentProfile.interests.filter((i) =>
+                          myProfile.interests.includes(i),
+                        )
+                      : [];
+                    return mutual.length > 0 ? (
+                      <span
+                        className="px-2 py-0.5 rounded-full text-xs font-bold"
+                        style={{
+                          background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                          color: "white",
+                        }}
+                      >
+                        💞 {mutual.length} common
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               )}
             </div>
           </button>
+
+          {/* Quick Card Reactions */}
+          <div className="flex items-center justify-center gap-3 mb-3">
+            {["❤️", "🔥", "😍"].map((emoji) => {
+              const reacted =
+                cardReactions[currentProfile.userId.toString()] === emoji;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  data-ocid="browse.toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCardReactions((prev) => ({
+                      ...prev,
+                      [currentProfile.userId.toString()]: reacted ? "" : emoji,
+                    }));
+                  }}
+                  className="w-12 h-12 rounded-full text-xl flex items-center justify-center transition-all active:scale-110"
+                  style={{
+                    background: reacted
+                      ? "linear-gradient(135deg,#e11d48,#7c3aed)"
+                      : "oklch(0.18 0.05 300)",
+                    border: reacted ? "none" : "1px solid oklch(0.3 0.07 300)",
+                    boxShadow: reacted
+                      ? "0 4px 16px oklch(0.65 0.22 10 / 0.4)"
+                      : undefined,
+                    transform: reacted ? "scale(1.1)" : "scale(1)",
+                  }}
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+          </div>
 
           {/* Action buttons */}
           <div className="flex items-center justify-center gap-6">
@@ -799,6 +908,35 @@ export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
               }}
             >
               <Heart className="w-6 h-6 text-white fill-white" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSuperLike(currentProfile)}
+              data-ocid="browse.secondary_button"
+              className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-90"
+              style={{
+                background: superLiked.has(currentProfile.userId.toString())
+                  ? "linear-gradient(135deg,#f59e0b,#d97706)"
+                  : "oklch(0.18 0.05 300)",
+                border: superLiked.has(currentProfile.userId.toString())
+                  ? "none"
+                  : "1px solid oklch(0.3 0.07 300)",
+                boxShadow: superLiked.has(currentProfile.userId.toString())
+                  ? "0 4px 16px rgba(245,158,11,0.5)"
+                  : undefined,
+              }}
+            >
+              <Star
+                className="w-5 h-5"
+                style={{
+                  color: superLiked.has(currentProfile.userId.toString())
+                    ? "white"
+                    : "#fbbf24",
+                  fill: superLiked.has(currentProfile.userId.toString())
+                    ? "white"
+                    : "none",
+                }}
+              />
             </button>
           </div>
 
@@ -873,6 +1011,12 @@ export default function BrowsePage({ onViewProfile, onNotifications }: Props) {
                             {Number(p.age)}
                           </p>
                         </div>
+                        {i % 3 === 0 && (
+                          <span
+                            className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-green-400"
+                            style={{ border: "1.5px solid #0a0010" }}
+                          />
+                        )}
                       </button>
                     ),
                   )}

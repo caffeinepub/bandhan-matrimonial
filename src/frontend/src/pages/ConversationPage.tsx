@@ -48,6 +48,16 @@ type ReplyTo = { id: string; text: string; senderName: string };
 
 const REACTIONS = ["❤️", "😂", "😮", "👍", "😢"];
 
+function matchedAgoLabel(createdAt: bigint): string {
+  const nowMs = Date.now();
+  const createdMs = Number(createdAt) / 1_000_000;
+  const diffMs = nowMs - createdMs;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "Matched today";
+  if (diffDays === 1) return "Matched yesterday";
+  return `Matched ${diffDays} days ago`;
+}
+
 export default function ConversationPage({
   profile,
   onBack,
@@ -300,6 +310,9 @@ export default function ConversationPage({
             <p className="font-semibold text-white text-sm">{profile.name}</p>
             <p className="text-[10px] text-green-400">
               {isTyping ? "typing..." : "Online"}
+            </p>
+            <p className="text-[10px] text-white/30 mt-0.5">
+              {matchedAgoLabel(profile.createdAt)}
             </p>
           </div>
         </div>

@@ -20,6 +20,9 @@ import BrowsePage from "./pages/BrowsePage";
 import CallHistoryPage from "./pages/CallHistoryPage";
 import ChatPage from "./pages/ChatPage";
 import ConversationPage from "./pages/ConversationPage";
+import DailySuggestionsPage from "./pages/DailySuggestionsPage";
+import LiveStreamListPage from "./pages/LiveStreamListPage";
+import LiveStreamPage from "./pages/LiveStreamPage";
 import LoginPage from "./pages/LoginPage";
 import MatchesPage from "./pages/MatchesPage";
 import MyProfilePage from "./pages/MyProfilePage";
@@ -42,7 +45,10 @@ export type Page =
   | "voiceCall"
   | "videoCall"
   | "callHistory"
-  | "notifications";
+  | "notifications"
+  | "liveStreamList"
+  | "liveStream"
+  | "dailySuggestions";
 
 interface IncomingCallInfo {
   fromProfile: Profile;
@@ -63,6 +69,8 @@ export default function App() {
   const [incomingCall, setIncomingCall] = useState<IncomingCallInfo | null>(
     null,
   );
+  const [activeLiveId, setActiveLiveId] = useState<bigint | null>(null);
+  const [isLiveHost, setIsLiveHost] = useState(false);
 
   const { data: profile, isLoading: profileLoading } = useCallerProfile();
   const { data: isAdmin } = useIsAdmin();
@@ -196,6 +204,41 @@ export default function App() {
       </>
     );
   }
+  if (currentPage === "liveStreamList") {
+    return (
+      <>
+        <LiveStreamListPage
+          onBack={() => setCurrentPage("browse")}
+          onJoinLive={(liveId, host) => {
+            setActiveLiveId(liveId);
+            setIsLiveHost(host);
+            setCurrentPage("liveStream");
+          }}
+        />
+        <Toaster />
+      </>
+    );
+  }
+  if (currentPage === "liveStream" && activeLiveId !== null) {
+    return (
+      <>
+        <LiveStreamPage
+          liveId={activeLiveId}
+          isHost={isLiveHost}
+          onBack={() => setCurrentPage("liveStreamList")}
+        />
+        <Toaster />
+      </>
+    );
+  }
+  if (currentPage === "dailySuggestions") {
+    return (
+      <>
+        <DailySuggestionsPage onBack={() => setCurrentPage("browse")} />
+        <Toaster />
+      </>
+    );
+  }
   if (currentPage === "viewProfile" && selectedProfile) {
     return (
       <>
@@ -260,6 +303,7 @@ export default function App() {
               setCurrentPage("viewProfile");
             }}
             onNotifications={() => setCurrentPage("notifications")}
+            onGoLive={() => setCurrentPage("liveStreamList")}
           />
         )}
         {currentPage === "requests" && <RequestsPage />}
@@ -268,6 +312,10 @@ export default function App() {
             onOpenChat={(p) => {
               setSelectedMatchForChat(p);
               setCurrentPage("conversation");
+            }}
+            onViewProfile={(p) => {
+              setSelectedProfile(p);
+              setCurrentPage("viewProfile");
             }}
           />
         )}
@@ -280,7 +328,11 @@ export default function App() {
           />
         )}
         {currentPage === "profile" && (
-          <MyProfilePage onCallHistory={() => setCurrentPage("callHistory")} />
+          <MyProfilePage
+            onCallHistory={() => setCurrentPage("callHistory")}
+            onGoLive={() => setCurrentPage("liveStreamList")}
+            onSuggestions={() => setCurrentPage("dailySuggestions")}
+          />
         )}
         {currentPage === "admin" && isAdmin && <AdminPage />}
       </main>

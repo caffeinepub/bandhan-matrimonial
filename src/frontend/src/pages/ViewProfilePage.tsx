@@ -1,3 +1,4 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ArrowLeft,
   Film,
@@ -6,12 +7,23 @@ import {
   MessageCircle,
   Music,
   Phone,
+  Share2,
+  Star,
   Video,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Profile } from "../backend";
 import GalleryLightbox from "../components/GalleryLightbox";
-import { useSendMatchRequest } from "../hooks/useQueries";
+import StoryViewerModal from "../components/StoryViewerModal";
+import {
+  useCallerProfile,
+  useHasSuperLiked,
+  useRecordProfileView,
+  useSendMatchRequest,
+  useStories,
+  useSuperLikeUser,
+  useUnsuperLikeUser,
+} from "../hooks/useQueries";
 
 interface Props {
   profile: Profile;
@@ -19,6 +31,199 @@ interface Props {
   onChat: () => void;
   onVoiceCall: () => void;
   onVideoCall: () => void;
+}
+
+// --- Compatibility Score Component ---
+function CompatibilityScore({
+  myProfile,
+  theirProfile,
+}: { myProfile: Profile; theirProfile: Profile }) {
+  // Score: shared interests (40%), same religion (20%), same city (20%), age within 5 years (20%)
+  const sharedInterests = theirProfile.interests.filter((i) =>
+    myProfile.interests.includes(i),
+  ).length;
+  const maxInterests = Math.max(
+    theirProfile.interests.length,
+    myProfile.interests.length,
+    1,
+  );
+  const interestScore = Math.min(sharedInterests / maxInterests, 1) * 40;
+  const religionScore =
+    myProfile.religion &&
+    theirProfile.religion &&
+    myProfile.religion.toLowerCase() === theirProfile.religion.toLowerCase()
+      ? 20
+      : 0;
+  const cityScore =
+    myProfile.location &&
+    theirProfile.location &&
+    myProfile.location.toLowerCase().split(",")[0].trim() ===
+      theirProfile.location.toLowerCase().split(",")[0].trim()
+      ? 20
+      : 0;
+  const ageDiff = Math.abs(Number(myProfile.age) - Number(theirProfile.age));
+  const ageScore = ageDiff <= 5 ? 20 : ageDiff <= 10 ? 10 : 0;
+  const score = Math.round(
+    interestScore + religionScore + cityScore + ageScore,
+  );
+
+  // Animate ring on mount
+  const [animatedScore, setAnimatedScore] = useState(0);
+  const frameRef = useRef<number | null>(null);
+  useEffect(() => {
+    let start: number | null = null;
+    const duration = 1000;
+    const animate = (ts: number) => {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      const progress = Math.min(elapsed / duration, 1);
+      setAnimatedScore(Math.round(progress * score));
+      if (progress < 1) frameRef.current = requestAnimationFrame(animate);
+    };
+    frameRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
+  }, [score]);
+
+  const circumference = 2 * Math.PI * 36;
+  const dashOffset = circumference * (1 - animatedScore / 100);
+
+  const label =
+    score >= 80
+      ? "Excellent Match"
+      : score >= 60
+        ? "Great Match"
+        : score >= 40
+          ? "Good Match"
+          : "Potential Match";
+
+  return (
+    <div
+      className="rounded-2xl p-4 flex items-center gap-4"
+      style={{ background: "oklch(0.13 0.05 300)" }}
+    >
+      <div className="relative w-20 h-20 flex-shrink-0">
+        <svg
+          width="80"
+          height="80"
+          viewBox="0 0 80 80"
+          aria-label="Compatibility score ring"
+          role="img"
+        >
+          <circle
+            cx="40"
+            cy="40"
+            r="36"
+            fill="none"
+            stroke="oklch(0.2 0.05 300)"
+            strokeWidth="6"
+          />
+          <circle
+            cx="40"
+            cy="40"
+            r="36"
+            fill="none"
+            stroke="url(#compatGrad)"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            style={{
+              transform: "rotate(-90deg)",
+              transformOrigin: "center",
+              transition: "stroke-dashoffset 0.05s linear",
+            }}
+          />
+          <defs>
+            <linearGradient id="compatGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#e11d48" />
+              <stop offset="100%" stopColor="#7c3aed" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-white font-bold text-lg">{animatedScore}%</span>
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p
+          className="font-bold text-base"
+          style={{
+            background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          Compatibility
+        </p>
+        <p className="text-white/70 text-sm mt-0.5">{label}</p>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {religionScore > 0 && <ScorePill label="Same Religion" />}
+          {cityScore > 0 && <ScorePill label="Same City" />}
+          {ageScore === 20 && <ScorePill label="Similar Age" />}
+          {sharedInterests > 0 && (
+            <ScorePill label={`${sharedInterests} shared interests`} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScorePill({ label }: { label: string }) {
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-[10px] text-white font-medium"
+      style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// --- Share Button ---
+function ShareButton({ profile }: { profile: Profile }) {
+  const [copied, setCopied] = useState(false);
+  const handleShare = async () => {
+    const url = `${window.location.origin}?profile=${profile.userId.toString()}`;
+    const shareData = {
+      title: profile.name,
+      text: `Check out ${profile.name}'s profile on Bandhan`,
+      url,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {}
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleShare}
+      data-ocid="viewprofile.secondary_button"
+      className="w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all active:scale-90 relative"
+      style={{
+        background: "oklch(0.18 0.05 300)",
+        border: "1px solid oklch(0.3 0.07 300)",
+      }}
+    >
+      <Share2 className="w-5 h-5 text-white" />
+      {copied && (
+        <span
+          className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] text-white px-2 py-0.5 rounded-full whitespace-nowrap"
+          style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+        >
+          Copied!
+        </span>
+      )}
+    </button>
+  );
 }
 
 export default function ViewProfilePage({
@@ -29,10 +234,61 @@ export default function ViewProfilePage({
   onVideoCall,
 }: Props) {
   const sendRequest = useSendMatchRequest();
+  const recordProfileView = useRecordProfileView();
+  const superLikeMutation = useSuperLikeUser();
+  const unsuperLikeMutation = useUnsuperLikeUser();
+  const { data: hasSuperLikedData = false } = useHasSuperLiked(profile.userId);
+  const { data: myProfile } = useCallerProfile();
+  const { data: allStories = [] } = useStories();
   const [liked, setLiked] = useState(false);
+  const [superLiked, setSuperLiked] = useState(false);
   const [mediaIdx, setMediaIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [storyViewerIndex, setStoryViewerIndex] = useState(0);
+
+  // Sync hasSuperLiked from backend
+  useEffect(() => {
+    setSuperLiked(hasSuperLikedData);
+  }, [hasSuperLikedData]);
+
+  // Record profile view silently on mount
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fire-once on mount
+  useEffect(() => {
+    recordProfileView.mutate(profile.userId);
+  }, [profile.userId]);
+
+  // Mutual interests
+  const mutualInterests = myProfile
+    ? profile.interests.filter((i) => myProfile.interests.includes(i))
+    : [];
+
+  // Story highlights for this profile
+  const profileHighlights = allStories.filter((s) => {
+    if (s.userId.toString() !== profile.userId.toString()) return false;
+    try {
+      const key = `story_highlights_${s.userId.toString()}`;
+      const stored = localStorage.getItem(key);
+      if (!stored) return false;
+      const ids: string[] = JSON.parse(stored);
+      return ids.includes(s.id.toString());
+    } catch {
+      return false;
+    }
+  });
+
+  const handleSuperLike = async () => {
+    try {
+      if (superLiked) {
+        await unsuperLikeMutation.mutateAsync(profile.userId);
+        setSuperLiked(false);
+      } else {
+        await superLikeMutation.mutateAsync(profile.userId);
+        setSuperLiked(true);
+      }
+    } catch {}
+  };
 
   const allMedia = [profile.photoUrl, ...profile.mediaUrls].filter(
     Boolean,
@@ -133,6 +389,12 @@ export default function ViewProfilePage({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {/* Compatibility Score */}
+        {myProfile &&
+          myProfile.userId.toString() !== profile.userId.toString() && (
+            <CompatibilityScore myProfile={myProfile} theirProfile={profile} />
+          )}
+
         {/* Quick stats */}
         <div className="grid grid-cols-3 gap-2">
           {[
@@ -165,6 +427,75 @@ export default function ViewProfilePage({
         )}
         {profile.thoughts && (
           <Section title="Life Philosophy">"{profile.thoughts}"</Section>
+        )}
+
+        {/* Mutual Interests Badge */}
+        {mutualInterests.length > 0 && (
+          <div
+            className="rounded-2xl p-4 flex items-start gap-3"
+            style={{
+              background:
+                "linear-gradient(135deg,oklch(0.18 0.08 10 / 0.4),oklch(0.18 0.08 280 / 0.4))",
+              border: "1px solid oklch(0.35 0.12 10 / 0.4)",
+            }}
+          >
+            <span className="text-2xl">💞</span>
+            <div>
+              <p className="text-white font-semibold text-sm">
+                {mutualInterests.length} mutual interest
+                {mutualInterests.length > 1 ? "s" : ""}
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {mutualInterests.map((i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-0.5 rounded-full text-xs text-white font-medium"
+                    style={{
+                      background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                    }}
+                  >
+                    {i}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Story Highlights */}
+        {profileHighlights.length > 0 && (
+          <div>
+            <SectionTitle>Highlights</SectionTitle>
+            <div className="flex gap-3 mt-2 overflow-x-auto pb-1">
+              {profileHighlights.map((story, i) => (
+                <button
+                  key={story.id.toString()}
+                  type="button"
+                  data-ocid={`viewprofile.item.${i + 1}`}
+                  onClick={() => {
+                    const idx = allStories.findIndex((s) => s.id === story.id);
+                    setStoryViewerIndex(idx >= 0 ? idx : 0);
+                    setStoryViewerOpen(true);
+                  }}
+                  className="flex-shrink-0 flex flex-col items-center gap-1.5"
+                >
+                  <div
+                    className="w-14 h-14 rounded-full overflow-hidden"
+                    style={{ border: "2px solid", borderColor: "#e11d48" }}
+                  >
+                    <img
+                      src={story.imageUrl}
+                      alt={story.caption}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <span className="text-white/50 text-[9px] truncate w-14 text-center">
+                    {story.caption || "Story"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Interests */}
@@ -288,6 +619,28 @@ export default function ViewProfilePage({
         </button>
         <button
           type="button"
+          onClick={handleSuperLike}
+          disabled={
+            superLikeMutation.isPending || unsuperLikeMutation.isPending
+          }
+          data-ocid="viewprofile.secondary_button"
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-90"
+          style={{
+            background: superLiked
+              ? "linear-gradient(135deg,#f59e0b,#d97706)"
+              : "oklch(0.18 0.05 300)",
+            border: superLiked ? "none" : "1px solid oklch(0.3 0.07 300)",
+            boxShadow: superLiked
+              ? "0 4px 16px rgba(245,158,11,0.5)"
+              : undefined,
+          }}
+        >
+          <Star
+            className={`w-5 h-5 ${superLiked ? "fill-white text-white" : "text-yellow-400"}`}
+          />
+        </button>
+        <button
+          type="button"
           onClick={handleLike}
           disabled={liked || sendRequest.isPending}
           data-ocid="viewprofile.primary_button"
@@ -303,6 +656,7 @@ export default function ViewProfilePage({
           />
           {liked ? "Request Sent" : "Send Heart"}
         </button>
+        <ShareButton profile={profile} />
         <button
           type="button"
           onClick={onChat}
@@ -320,6 +674,15 @@ export default function ViewProfilePage({
           images={allMedia}
           initialIndex={lightboxIndex}
           onClose={() => setLightboxOpen(false)}
+        />
+      )}
+
+      {/* Story Viewer Modal for Highlights */}
+      {storyViewerOpen && allStories.length > 0 && (
+        <StoryViewerModal
+          stories={allStories}
+          initialIndex={storyViewerIndex}
+          onClose={() => setStoryViewerOpen(false)}
         />
       )}
     </div>
