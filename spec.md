@@ -1,39 +1,35 @@
 # Bandhan Matrimonial
 
 ## Current State
-- BrowsePage has two rows: (1) header with Discover text + LIVE button + NotificationBell + ring icon, (2) search input + filter button always visible
-- StoriesRow has a generic + button for own story, and gradient border rings for all stories (no distinction between viewed/new)
-- ChatPage has a basic layout: title, stories row, search, chat list
-- NotificationBell uses a Bell icon with heart functionality
+- ChatPage has a Messenger-style header with Menu and Edit icons
+- BrowsePage header has a 💍 ring icon displayed prominently
+- No chat settings panel exists in ChatPage
+- Blocked users are managed only in MyProfilePage with localStorage
 
 ## Requested Changes (Diff)
 
 ### Add
-- BrowsePage: search icon that toggles search+filter row (hidden by default, shows on tap)
-- StoriesRow: current logged-in user story shown leftmost with + icon (gray/dashed border), new unviewed stories with gradient border ring, viewed stories with gray border, multiple stories per user = segmented border ring equal to story count
-- ChatPage: Facebook Messenger-style layout with centered "Chats" title, search bar, active contacts row with circular avatars + online dots, and redesigned chat list rows
+- Chat Settings button/icon in ChatPage header (top right area or as gear icon)
+- Chat Settings Sheet with working settings:
+  - Who can send me messages (Everyone / Matches Only / Nobody)
+  - Who can add me to group chats (Everyone / Matches Only / Nobody)
+  - Read Receipts toggle
+  - Online Status toggle  
+  - Blocked Users section (view list + unblock button for each)
+  - Other Chats (Message Requests toggle - store unknown senders in a separate folder)
 
 ### Modify
-- BrowsePage header: single row = "Discover" text + ring icon + LIVE button + Search icon (toggles search) + Heart icon (replaces Bell icon but keeps notification functionality)
-- StoriesRow: distinguish own story (leftmost, +), new (gradient ring), viewed (gray ring), segmented ring for multiple stories
-- ChatPage: full layout redesign to Messenger style while preserving all existing functionality (story viewing, search, navigation)
-- NotificationBell: extract notification logic, render as Heart icon in BrowsePage header row
+- ChatPage header: replace Menu button with Settings gear icon that opens the settings sheet
+- BrowsePage header: hide the ring icon (💍)
+- Chat settings are persisted in localStorage
 
 ### Remove
-- BrowsePage always-visible search row (replaced by toggle)
+- Ring icon from BrowsePage header row (hidden, not removed from code)
 
 ## Implementation Plan
-1. Refactor NotificationBell to accept an `icon` prop or create HeartNotificationBell variant that renders Heart icon but uses same notification logic
-2. Update BrowsePage header to single row: Discover text (left), ring icon + LIVE + search-toggle icon + heart-notification icon (right)
-3. Add `showSearch` state; search+filter row only shows when search icon tapped
-4. Update StoriesRow:
-   - Accept `myUserId` to identify own stories
-   - Own story: leftmost, gray dashed border, + overlay
-   - Unviewed stories: gradient border ring
-   - Viewed stories: gray border
-   - Multiple stories from same user: segment the ring border into N equal arcs
-5. Redesign ChatPage to Messenger style:
-   - Header: hamburger (left) + "Chats" (center) + compose (right)
-   - Search input below header
-   - Active contacts horizontal scroll row with online indicator dots
-   - Chat list with larger avatars, name, last message preview, timestamp, unread dot
+1. In ChatPage.tsx: Add gear/settings icon button in header
+2. Create ChatSettingsSheet component inline or as state-driven Sheet
+3. Settings stored in localStorage: whoCanMessage, whoCanAddToGroup, readReceipts, showOnlineStatus, messageRequests
+4. Blocked users section reads from localStorage (same source as MyProfilePage)
+5. Unblock removes from localStorage blocked list
+6. In BrowsePage.tsx: hide the ring icon div (add hidden class or remove rendering)

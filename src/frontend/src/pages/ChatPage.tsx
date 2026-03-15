@@ -1,6 +1,13 @@
 import { Input } from "@/components/ui/input";
-import { Edit, Menu, Plus, Search } from "lucide-react";
-import { useRef, useState } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Edit, Plus, Search, Settings } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Profile } from "../backend";
 import StoryViewerModal from "../components/StoryViewerModal";
 import { useAddStory, useMutualMatches, useStories } from "../hooks/useQueries";
@@ -10,6 +17,46 @@ const STORY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 interface Props {
   onOpenConversation: (p: Profile) => void;
+}
+
+interface ChatSettings {
+  whoCanMessage: "everyone" | "matches" | "nobody";
+  whoCanAddToGroup: "everyone" | "matches" | "nobody";
+  readReceipts: boolean;
+  showOnlineStatus: boolean;
+  messageRequests: boolean;
+}
+
+const DEFAULT_SETTINGS: ChatSettings = {
+  whoCanMessage: "everyone",
+  whoCanAddToGroup: "matches",
+  readReceipts: true,
+  showOnlineStatus: true,
+  messageRequests: true,
+};
+
+function loadSettings(): ChatSettings {
+  try {
+    const raw = localStorage.getItem("chat_settings");
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch {}
+  return DEFAULT_SETTINGS;
+}
+
+function saveSettings(s: ChatSettings) {
+  localStorage.setItem("chat_settings", JSON.stringify(s));
+}
+
+function loadBlockedUsers(): string[] {
+  try {
+    const raw = localStorage.getItem("blockedUsers");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function saveBlockedUsers(users: string[]) {
+  localStorage.setItem("blockedUsers", JSON.stringify(users));
 }
 
 // Online indicator: show green dot for every 3rd profile (index % 3 === 0)
@@ -36,6 +83,38 @@ const FAKE_TIMES = [
   "6m",
 ];
 
+type MessageOption = "everyone" | "matches" | "nobody";
+
+function OptionButton({
+  label,
+  active,
+  onClick,
+  ocid,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  ocid: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-ocid={ocid}
+      onClick={onClick}
+      className="flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all"
+      style={{
+        background: active
+          ? "linear-gradient(135deg,#e11d48,#7c3aed)"
+          : "oklch(0.18 0.06 300)",
+        color: active ? "#fff" : "rgba(255,255,255,0.55)",
+        border: active ? "none" : "1px solid oklch(0.25 0.06 300)",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function ChatPage({ onOpenConversation }: Props) {
   const { data: matches = [], isLoading } = useMutualMatches();
   const { data: allStories = [] } = useStories();
@@ -45,7 +124,27 @@ export default function ChatPage({ onOpenConversation }: Props) {
     null,
   );
   const [chatSearch, setChatSearch] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<ChatSettings>(loadSettings);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>(loadBlockedUsers);
   const storyFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    saveSettings(settings);
+  }, [settings]);
+
+  const updateSetting = <K extends keyof ChatSettings>(
+    key: K,
+    value: ChatSettings[K],
+  ) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const unblockUser = (entry: string) => {
+    const updated = blockedUsers.filter((u) => u !== entry);
+    setBlockedUsers(updated);
+    saveBlockedUsers(updated);
+  };
 
   const stories = allStories.filter(
     (s) => Date.now() - Number(s.timestamp) / 1_000_000 <= STORY_MAX_AGE_MS,
@@ -92,11 +191,12 @@ export default function ChatPage({ onOpenConversation }: Props) {
       >
         <button
           type="button"
-          data-ocid="chat.button"
+          data-ocid="chat.settings_button"
+          onClick={() => setSettingsOpen(true)}
           className="w-9 h-9 rounded-full flex items-center justify-center"
           style={{ background: "oklch(0.15 0.05 300)" }}
         >
-          <Menu className="w-5 h-5 text-white/70" />
+          <Settings className="w-5 h-5 text-white/70" />
         </button>
         <h1 className="text-xl font-bold text-white tracking-tight">Chats</h1>
         <button
@@ -348,6 +448,207 @@ export default function ChatPage({ onOpenConversation }: Props) {
           onClose={() => setViewingStoryIndex(null)}
         />
       )}
+
+      {/* Chat Settings Sheet */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent
+          side="bottom"
+          data-ocid="chat.settings.sheet"
+          className="rounded-t-3xl border-0 max-h-[90vh] overflow-y-auto"
+          style={{ background: "#0a0010", color: "#fff" }}
+        >
+          <SheetHeader className="mb-4">
+            <SheetTitle className="text-white text-lg font-bold">
+              Chat Settings
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-6 pb-8">
+            {/* Who Can Send Me Messages */}
+            <div>
+              <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">
+                Who Can Send Me Messages
+              </p>
+              <div className="flex gap-2">
+                {(["everyone", "matches", "nobody"] as MessageOption[]).map(
+                  (opt) => (
+                    <OptionButton
+                      key={opt}
+                      label={
+                        opt === "everyone"
+                          ? "Everyone"
+                          : opt === "matches"
+                            ? "Matches Only"
+                            : "Nobody"
+                      }
+                      active={settings.whoCanMessage === opt}
+                      onClick={() => updateSetting("whoCanMessage", opt)}
+                      ocid="chat.settings.who_can_message.select"
+                    />
+                  ),
+                )}
+              </div>
+            </div>
+
+            {/* Who Can Add Me to Group */}
+            <div>
+              <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">
+                Who Can Add Me to Group Chat
+              </p>
+              <div className="flex gap-2">
+                {(["everyone", "matches", "nobody"] as MessageOption[]).map(
+                  (opt) => (
+                    <OptionButton
+                      key={opt}
+                      label={
+                        opt === "everyone"
+                          ? "Everyone"
+                          : opt === "matches"
+                            ? "Matches Only"
+                            : "Nobody"
+                      }
+                      active={settings.whoCanAddToGroup === opt}
+                      onClick={() => updateSetting("whoCanAddToGroup", opt)}
+                      ocid="chat.settings.who_can_group.select"
+                    />
+                  ),
+                )}
+              </div>
+            </div>
+
+            {/* Read Receipts */}
+            <div
+              className="flex items-center justify-between py-3 px-4 rounded-2xl"
+              style={{ background: "oklch(0.15 0.05 300)" }}
+            >
+              <div>
+                <p className="text-white text-sm font-medium">Read Receipts</p>
+                <p className="text-white/40 text-xs mt-0.5">
+                  {settings.readReceipts
+                    ? "Others can see when you've read messages"
+                    : "Others can't see when you've read messages"}
+                </p>
+              </div>
+              <Switch
+                checked={settings.readReceipts}
+                onCheckedChange={(v) => updateSetting("readReceipts", v)}
+                data-ocid="chat.settings.read_receipts.switch"
+              />
+            </div>
+
+            {/* Online Status */}
+            <div
+              className="flex items-center justify-between py-3 px-4 rounded-2xl"
+              style={{ background: "oklch(0.15 0.05 300)" }}
+            >
+              <div>
+                <p className="text-white text-sm font-medium">Online Status</p>
+                <p className="text-white/40 text-xs mt-0.5">
+                  {settings.showOnlineStatus
+                    ? "Others can see you're online"
+                    : "You appear offline to others"}
+                </p>
+              </div>
+              <Switch
+                checked={settings.showOnlineStatus}
+                onCheckedChange={(v) => updateSetting("showOnlineStatus", v)}
+                data-ocid="chat.settings.online_status.switch"
+              />
+            </div>
+
+            {/* Message Requests */}
+            <div
+              className="flex items-center justify-between py-3 px-4 rounded-2xl"
+              style={{ background: "oklch(0.15 0.05 300)" }}
+            >
+              <div>
+                <p className="text-white text-sm font-medium">
+                  Message Requests
+                </p>
+                <p className="text-white/40 text-xs mt-0.5">
+                  {settings.messageRequests
+                    ? "Non-match messages go to Requests folder"
+                    : "Non-match messages are blocked"}
+                </p>
+              </div>
+              <Switch
+                checked={settings.messageRequests}
+                onCheckedChange={(v) => updateSetting("messageRequests", v)}
+                data-ocid="chat.settings.message_requests.switch"
+              />
+            </div>
+
+            {/* Blocked Users */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-white/60 text-xs font-semibold uppercase tracking-wider">
+                  Blocked Users
+                </p>
+                {blockedUsers.length > 0 && (
+                  <span
+                    className="text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: "#e11d48" }}
+                  >
+                    {blockedUsers.length}
+                  </span>
+                )}
+              </div>
+              {blockedUsers.length === 0 ? (
+                <div
+                  className="py-4 px-4 rounded-2xl text-center"
+                  style={{ background: "oklch(0.15 0.05 300)" }}
+                >
+                  <p className="text-white/40 text-sm">No blocked users</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {blockedUsers.map((entry, idx) => {
+                    const name = entry.includes(":")
+                      ? entry.split(":")[1]
+                      : entry;
+                    return (
+                      <div
+                        key={entry}
+                        className="flex items-center justify-between py-3 px-4 rounded-2xl"
+                        style={{ background: "oklch(0.15 0.05 300)" }}
+                        data-ocid={`chat.item.${idx + 1}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                            style={{
+                              background:
+                                "linear-gradient(135deg,#e11d48,#7c3aed)",
+                            }}
+                          >
+                            {name.charAt(0).toUpperCase()}
+                          </div>
+                          <p className="text-white text-sm font-medium">
+                            {name}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          data-ocid={`chat.settings.unblock_button.${idx + 1}`}
+                          onClick={() => unblockUser(entry)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full"
+                          style={{
+                            background:
+                              "linear-gradient(135deg,#e11d48,#7c3aed)",
+                            color: "#fff",
+                          }}
+                        >
+                          Unblock
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

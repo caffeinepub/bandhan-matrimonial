@@ -306,13 +306,15 @@ export default function BrowsePage({
       <div className="px-5 pt-12 pb-3 flex items-center justify-between">
         <h1 className="text-2xl font-bold discover-text">Discover</h1>
         <div className="flex items-center gap-2">
-          {/* Ring icon */}
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
-          >
-            <span className="text-white text-base">💍</span>
-          </div>
+          {/* Ring icon - hidden */}
+          {false && (
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+            >
+              <span className="text-white text-base">💍</span>
+            </div>
+          )}
           {/* LIVE button */}
           {onGoLive && (
             <button
