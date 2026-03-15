@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Play, Radio, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { LiveStream } from "../backend";
-import { useActor } from "../hooks/useActor";
+import { useAppActor as useActor } from "../hooks/useAppActor";
 
 interface LiveStreamListPageProps {
   onBack: () => void;
@@ -182,7 +182,7 @@ export default function LiveStreamListPage({
                   </p>
                   <div className="flex items-center gap-1.5 mt-1">
                     <Avatar className="w-5 h-5">
-                      <AvatarImage src={live.hostPhoto} />
+                      <AvatarImage src={live.hostPhoto ?? undefined} />
                       <AvatarFallback className="text-[9px]">
                         {live.hostName.charAt(0)}
                       </AvatarFallback>

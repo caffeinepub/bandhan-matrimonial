@@ -69,9 +69,12 @@ export default function LoginPage() {
     setError("");
     if (selectedInterests.length < 3)
       return setError("Pick at least 3 interests");
-    const users: Record<string, unknown>[] = JSON.parse(
-      localStorage.getItem("bandhan_users") || "[]",
-    );
+    let users: Record<string, unknown>[] = [];
+    try {
+      users = JSON.parse(localStorage.getItem("bandhan_users") || "[]");
+    } catch {
+      localStorage.removeItem("bandhan_users");
+    }
     const exists = users.find(
       (u: any) => u.emailOrPhone === formData.emailOrPhone,
     );
@@ -94,9 +97,12 @@ export default function LoginPage() {
     setError("");
     if (!signInData.emailOrPhone.trim() || !signInData.password)
       return setError("All fields required");
-    const users: any[] = JSON.parse(
-      localStorage.getItem("bandhan_users") || "[]",
-    );
+    let users: any[] = [];
+    try {
+      users = JSON.parse(localStorage.getItem("bandhan_users") || "[]");
+    } catch {
+      localStorage.removeItem("bandhan_users");
+    }
     const user = users.find(
       (u) =>
         u.emailOrPhone === signInData.emailOrPhone &&

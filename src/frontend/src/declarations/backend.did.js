@@ -19,153 +19,18 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
-export const Story = IDL.Record({
-  'id' : IDL.Nat,
-  'userId' : IDL.Principal,
-  'authorName' : IDL.Text,
-  'authorPhoto' : IDL.Opt(IDL.Text),
-  'imageUrl' : IDL.Text,
-  'timestamp' : IDL.Int,
-  'caption' : IDL.Text,
-  'likesCount' : IDL.Nat,
-});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const CallType = IDL.Variant({ 'video' : IDL.Null, 'voice' : IDL.Null });
-export const CallSignalType = IDL.Variant({
-  'iceCandidate' : IDL.Null,
-  'offer' : IDL.Null,
-  'callEnd' : IDL.Null,
-  'answer' : IDL.Null,
-  'callDecline' : IDL.Null,
-});
-export const CallSignal = IDL.Record({
+export const GiftRecord = IDL.Record({
   'id' : IDL.Nat,
-  'data' : IDL.Text,
-  'toUserId' : IDL.Principal,
-  'callType' : CallType,
-  'fromUserId' : IDL.Principal,
-  'timestamp' : IDL.Int,
-  'signalType' : CallSignalType,
-});
-export const Gender = IDL.Variant({
-  'other' : IDL.Null,
-  'female' : IDL.Null,
-  'male' : IDL.Null,
-});
-export const LiveStreamFilter = IDL.Variant({
-  'all' : IDL.Null,
-  'gender' : Gender,
-  'religion' : IDL.Text,
-});
-export const LiveStream = IDL.Record({
-  'id' : IDL.Nat,
-  'title' : IDL.Text,
-  'startedAt' : IDL.Int,
-  'matchesOnly' : IDL.Bool,
-  'hostName' : IDL.Text,
-  'isActive' : IDL.Bool,
-  'hostId' : IDL.Principal,
-  'hostPhoto' : IDL.Opt(IDL.Text),
-  'filterSetting' : LiveStreamFilter,
-});
-export const Profile = IDL.Record({
-  'age' : IDL.Nat,
-  'bio' : IDL.Text,
-  'occupation' : IDL.Text,
-  'height' : IDL.Text,
-  'aboutMe' : IDL.Text,
-  'favoriteSongs' : IDL.Vec(IDL.Text),
-  'interests' : IDL.Vec(IDL.Text),
-  'userId' : IDL.Principal,
-  'mood' : IDL.Text,
-  'name' : IDL.Text,
-  'createdAt' : IDL.Int,
-  'education' : IDL.Text,
-  'photoUrl' : IDL.Opt(IDL.Text),
-  'motherTongue' : IDL.Text,
-  'gender' : Gender,
-  'favoriteMovies' : IDL.Vec(IDL.Text),
-  'mediaUrls' : IDL.Vec(IDL.Text),
-  'phone' : IDL.Opt(IDL.Text),
-  'religion' : IDL.Text,
-  'thoughts' : IDL.Text,
-  'maritalStatus' : IDL.Text,
-  'location' : IDL.Text,
-  'hobbies' : IDL.Vec(IDL.Text),
-});
-export const CallStatus = IDL.Variant({
-  'completed' : IDL.Null,
-  'missed' : IDL.Null,
-  'declined' : IDL.Null,
-});
-export const CallHistory = IDL.Record({
-  'status' : CallStatus,
-  'withUserId' : IDL.Principal,
-  'callType' : CallType,
-  'durationSeconds' : IDL.Nat,
-  'timestamp' : IDL.Int,
-});
-export const LiveMessage = IDL.Record({
-  'id' : IDL.Int,
-  'userName' : IDL.Text,
-  'userId' : IDL.Principal,
-  'text' : IDL.Text,
-  'timestamp' : IDL.Int,
-  'liveId' : IDL.Nat,
-});
-export const LiveReaction = IDL.Record({
-  'userId' : IDL.Principal,
-  'emoji' : IDL.Text,
-  'timestamp' : IDL.Int,
-  'liveId' : IDL.Nat,
-});
-export const MessageWithMeta = IDL.Record({
-  'id' : IDL.Nat,
-  'isDeleted' : IDL.Bool,
-  'read' : IDL.Bool,
-  'text' : IDL.Text,
+  'giftEmoji' : IDL.Text,
   'toUserId' : IDL.Principal,
   'fromUserId' : IDL.Principal,
   'timestamp' : IDL.Int,
-  'reaction' : IDL.Opt(IDL.Text),
-});
-export const StoryNotifType = IDL.Variant({
-  'like' : IDL.Null,
-  'comment' : IDL.Null,
-  'reply' : IDL.Null,
-});
-export const StoryNotification = IDL.Record({
-  'id' : IDL.Nat,
-  'actorName' : IDL.Text,
-  'notifType' : StoryNotifType,
-  'storyId' : IDL.Nat,
-  'storyOwnerId' : IDL.Principal,
-  'actorPhoto' : IDL.Opt(IDL.Text),
-  'text' : IDL.Text,
-  'actorUserId' : IDL.Principal,
-  'timestamp' : IDL.Int,
-});
-export const SuperLikeNotification = IDL.Record({
-  'fromProfile' : Profile,
-  'timestamp' : IDL.Int,
-});
-export const PrivacyVisibility = IDL.Variant({
-  'everyone' : IDL.Null,
-  'matchesOnly' : IDL.Null,
-  'hidden' : IDL.Null,
-});
-export const StoryComment = IDL.Record({
-  'id' : IDL.Nat,
-  'parentCommentId' : IDL.Opt(IDL.Nat),
-  'userId' : IDL.Principal,
-  'storyId' : IDL.Nat,
-  'text' : IDL.Text,
-  'authorName' : IDL.Text,
-  'timestamp' : IDL.Int,
+  'giftName' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -196,162 +61,12 @@ export const idlService = IDL.Service({
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
-  'acceptMatchRequest' : IDL.Func([IDL.Principal], [], []),
-  'addLiveReaction' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'addStory' : IDL.Func([IDL.Text, IDL.Text], [], []),
-  'addStoryComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'addStoryReaction' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'adminDeleteProfile' : IDL.Func([IDL.Principal], [], []),
-  'adminDeleteStory' : IDL.Func([IDL.Nat], [], []),
-  'adminGetAllStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-  'blockFromLive' : IDL.Func([IDL.Nat, IDL.Principal], [], []),
-  'consumeCallSignals' : IDL.Func([IDL.Principal], [IDL.Vec(CallSignal)], []),
-  'createOrUpdateProfile' : IDL.Func(
-      [
-        IDL.Text,
-        IDL.Nat,
-        Gender,
-        IDL.Text,
-        IDL.Text,
-        IDL.Text,
-        IDL.Opt(IDL.Text),
-        IDL.Text,
-        IDL.Text,
-        IDL.Text,
-        IDL.Text,
-        IDL.Vec(IDL.Text),
-        IDL.Vec(IDL.Text),
-        IDL.Text,
-        IDL.Vec(IDL.Text),
-        IDL.Vec(IDL.Text),
-        IDL.Text,
-        IDL.Text,
-        IDL.Vec(IDL.Text),
-        IDL.Text,
-        IDL.Opt(IDL.Text),
-      ],
-      [],
-      [],
-    ),
-  'declineMatchRequest' : IDL.Func([IDL.Principal], [], []),
-  'deleteMessage' : IDL.Func([IDL.Nat], [], []),
-  'deleteStory' : IDL.Func([IDL.Nat], [], []),
-  'editMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'endLive' : IDL.Func([IDL.Nat], [], []),
-  'getActiveLives' : IDL.Func([], [IDL.Vec(LiveStream)], ['query']),
-  'getAllProfiles' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-  'getAllWithRequestedCount' : IDL.Func(
-      [],
-      [IDL.Vec(IDL.Tuple(Profile, IDL.Nat))],
-      ['query'],
-    ),
-  'getCallHistory' : IDL.Func(
-      [],
-      [IDL.Vec(IDL.Tuple(CallHistory, Profile))],
-      ['query'],
-    ),
-  'getCallerStoryReaction' : IDL.Func(
-      [IDL.Nat],
-      [IDL.Opt(IDL.Text)],
-      ['query'],
-    ),
-  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(Profile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
-  'getDailySuggestions' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-  'getLiveMessages' : IDL.Func([IDL.Nat], [IDL.Vec(LiveMessage)], ['query']),
-  'getLiveReactions' : IDL.Func([IDL.Nat], [IDL.Vec(LiveReaction)], ['query']),
-  'getLiveViewers' : IDL.Func([IDL.Nat], [IDL.Vec(Profile)], ['query']),
-  'getMatchRequests' : IDL.Func(
-      [],
-      [
-        IDL.Vec(
-          IDL.Tuple(
-            Profile,
-            IDL.Variant({
-              'pending' : IDL.Null,
-              'accepted' : IDL.Null,
-              'declined' : IDL.Null,
-            }),
-          )
-        ),
-      ],
-      ['query'],
-    ),
-  'getMessages' : IDL.Func(
-      [IDL.Principal],
-      [IDL.Vec(MessageWithMeta)],
-      ['query'],
-    ),
-  'getMutualMatches' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-  'getMyNotifications' : IDL.Func(
-      [],
-      [IDL.Vec(StoryNotification), IDL.Vec(SuperLikeNotification)],
-      ['query'],
-    ),
-  'getMyStoryNotifications' : IDL.Func(
-      [],
-      [IDL.Vec(StoryNotification)],
-      ['query'],
-    ),
-  'getPremiumStatus' : IDL.Func([], [IDL.Bool], ['query']),
-  'getPrivacyVisibility' : IDL.Func([], [PrivacyVisibility], ['query']),
-  'getProfileViewCount' : IDL.Func([], [IDL.Nat], ['query']),
-  'getProfileViewers' : IDL.Func(
-      [],
-      [IDL.Vec(IDL.Tuple(Profile, IDL.Int))],
-      ['query'],
-    ),
-  'getShowLastActive' : IDL.Func([], [IDL.Bool], ['query']),
-  'getStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
-  'getStoryComments' : IDL.Func([IDL.Nat], [IDL.Vec(StoryComment)], ['query']),
-  'getStoryReactions' : IDL.Func(
-      [IDL.Nat],
-      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
-      ['query'],
-    ),
-  'getStoryViewCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
-  'getStoryViewers' : IDL.Func([IDL.Nat], [IDL.Vec(Profile)], ['query']),
-  'getSuperLikeNotifications' : IDL.Func(
-      [],
-      [IDL.Vec(SuperLikeNotification)],
-      ['query'],
-    ),
-  'getSuperLikedBy' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-  'getTypingStatus' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
-  'getUserProfile' : IDL.Func([IDL.Principal], [IDL.Opt(Profile)], ['query']),
-  'hasLikedStory' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
-  'hasSuperLiked' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
-  'isAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'getGiftsReceived' : IDL.Func([], [IDL.Vec(GiftRecord)], ['query']),
+  'getGiftsSent' : IDL.Func([], [IDL.Vec(GiftRecord)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-  'joinLive' : IDL.Func([IDL.Nat], [], []),
-  'leaveLive' : IDL.Func([IDL.Nat], [], []),
-  'likeStory' : IDL.Func([IDL.Nat], [], []),
-  'logCall' : IDL.Func([IDL.Principal, CallType, IDL.Nat, CallStatus], [], []),
-  'markMessageRead' : IDL.Func([IDL.Nat], [], []),
-  'reactToMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'recordProfileView' : IDL.Func([IDL.Principal], [], []),
-  'recordStoryView' : IDL.Func([IDL.Nat], [], []),
-  'replyToStoryComment' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
-  'saveCallerUserProfile' : IDL.Func([Profile], [], []),
-  'searchProfiles' : IDL.Func([IDL.Text], [IDL.Vec(Profile)], ['query']),
-  'sendLiveMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'sendMatchRequest' : IDL.Func([IDL.Principal], [], []),
-  'sendMessage' : IDL.Func([IDL.Principal, IDL.Text], [], []),
-  'setLiveFilter' : IDL.Func([IDL.Nat, LiveStreamFilter], [], []),
-  'setPremiumStatus' : IDL.Func([IDL.Bool], [], []),
-  'setPrivacyVisibility' : IDL.Func([PrivacyVisibility], [], []),
-  'setShowLastActive' : IDL.Func([IDL.Bool], [], []),
-  'setTyping' : IDL.Func([IDL.Principal, IDL.Bool], [], []),
-  'startLive' : IDL.Func([IDL.Text, IDL.Bool], [IDL.Nat], []),
-  'storeCallSignal' : IDL.Func(
-      [IDL.Principal, CallSignalType, IDL.Text, CallType],
-      [],
-      [],
-    ),
-  'superLikeUser' : IDL.Func([IDL.Principal], [], []),
-  'unlikeStory' : IDL.Func([IDL.Nat], [], []),
-  'unsuperLikeUser' : IDL.Func([IDL.Principal], [], []),
+  'sendGift' : IDL.Func([IDL.Principal, IDL.Text, IDL.Text], [GiftRecord], []),
 });
 
 export const idlInitArgs = [];
@@ -368,153 +83,18 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
-  const Story = IDL.Record({
-    'id' : IDL.Nat,
-    'userId' : IDL.Principal,
-    'authorName' : IDL.Text,
-    'authorPhoto' : IDL.Opt(IDL.Text),
-    'imageUrl' : IDL.Text,
-    'timestamp' : IDL.Int,
-    'caption' : IDL.Text,
-    'likesCount' : IDL.Nat,
-  });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const CallType = IDL.Variant({ 'video' : IDL.Null, 'voice' : IDL.Null });
-  const CallSignalType = IDL.Variant({
-    'iceCandidate' : IDL.Null,
-    'offer' : IDL.Null,
-    'callEnd' : IDL.Null,
-    'answer' : IDL.Null,
-    'callDecline' : IDL.Null,
-  });
-  const CallSignal = IDL.Record({
+  const GiftRecord = IDL.Record({
     'id' : IDL.Nat,
-    'data' : IDL.Text,
-    'toUserId' : IDL.Principal,
-    'callType' : CallType,
-    'fromUserId' : IDL.Principal,
-    'timestamp' : IDL.Int,
-    'signalType' : CallSignalType,
-  });
-  const Gender = IDL.Variant({
-    'other' : IDL.Null,
-    'female' : IDL.Null,
-    'male' : IDL.Null,
-  });
-  const LiveStreamFilter = IDL.Variant({
-    'all' : IDL.Null,
-    'gender' : Gender,
-    'religion' : IDL.Text,
-  });
-  const LiveStream = IDL.Record({
-    'id' : IDL.Nat,
-    'title' : IDL.Text,
-    'startedAt' : IDL.Int,
-    'matchesOnly' : IDL.Bool,
-    'hostName' : IDL.Text,
-    'isActive' : IDL.Bool,
-    'hostId' : IDL.Principal,
-    'hostPhoto' : IDL.Opt(IDL.Text),
-    'filterSetting' : LiveStreamFilter,
-  });
-  const Profile = IDL.Record({
-    'age' : IDL.Nat,
-    'bio' : IDL.Text,
-    'occupation' : IDL.Text,
-    'height' : IDL.Text,
-    'aboutMe' : IDL.Text,
-    'favoriteSongs' : IDL.Vec(IDL.Text),
-    'interests' : IDL.Vec(IDL.Text),
-    'userId' : IDL.Principal,
-    'mood' : IDL.Text,
-    'name' : IDL.Text,
-    'createdAt' : IDL.Int,
-    'education' : IDL.Text,
-    'photoUrl' : IDL.Opt(IDL.Text),
-    'motherTongue' : IDL.Text,
-    'gender' : Gender,
-    'favoriteMovies' : IDL.Vec(IDL.Text),
-    'mediaUrls' : IDL.Vec(IDL.Text),
-    'phone' : IDL.Opt(IDL.Text),
-    'religion' : IDL.Text,
-    'thoughts' : IDL.Text,
-    'maritalStatus' : IDL.Text,
-    'location' : IDL.Text,
-    'hobbies' : IDL.Vec(IDL.Text),
-  });
-  const CallStatus = IDL.Variant({
-    'completed' : IDL.Null,
-    'missed' : IDL.Null,
-    'declined' : IDL.Null,
-  });
-  const CallHistory = IDL.Record({
-    'status' : CallStatus,
-    'withUserId' : IDL.Principal,
-    'callType' : CallType,
-    'durationSeconds' : IDL.Nat,
-    'timestamp' : IDL.Int,
-  });
-  const LiveMessage = IDL.Record({
-    'id' : IDL.Int,
-    'userName' : IDL.Text,
-    'userId' : IDL.Principal,
-    'text' : IDL.Text,
-    'timestamp' : IDL.Int,
-    'liveId' : IDL.Nat,
-  });
-  const LiveReaction = IDL.Record({
-    'userId' : IDL.Principal,
-    'emoji' : IDL.Text,
-    'timestamp' : IDL.Int,
-    'liveId' : IDL.Nat,
-  });
-  const MessageWithMeta = IDL.Record({
-    'id' : IDL.Nat,
-    'isDeleted' : IDL.Bool,
-    'read' : IDL.Bool,
-    'text' : IDL.Text,
+    'giftEmoji' : IDL.Text,
     'toUserId' : IDL.Principal,
     'fromUserId' : IDL.Principal,
     'timestamp' : IDL.Int,
-    'reaction' : IDL.Opt(IDL.Text),
-  });
-  const StoryNotifType = IDL.Variant({
-    'like' : IDL.Null,
-    'comment' : IDL.Null,
-    'reply' : IDL.Null,
-  });
-  const StoryNotification = IDL.Record({
-    'id' : IDL.Nat,
-    'actorName' : IDL.Text,
-    'notifType' : StoryNotifType,
-    'storyId' : IDL.Nat,
-    'storyOwnerId' : IDL.Principal,
-    'actorPhoto' : IDL.Opt(IDL.Text),
-    'text' : IDL.Text,
-    'actorUserId' : IDL.Principal,
-    'timestamp' : IDL.Int,
-  });
-  const SuperLikeNotification = IDL.Record({
-    'fromProfile' : Profile,
-    'timestamp' : IDL.Int,
-  });
-  const PrivacyVisibility = IDL.Variant({
-    'everyone' : IDL.Null,
-    'matchesOnly' : IDL.Null,
-    'hidden' : IDL.Null,
-  });
-  const StoryComment = IDL.Record({
-    'id' : IDL.Nat,
-    'parentCommentId' : IDL.Opt(IDL.Nat),
-    'userId' : IDL.Principal,
-    'storyId' : IDL.Nat,
-    'text' : IDL.Text,
-    'authorName' : IDL.Text,
-    'timestamp' : IDL.Int,
+    'giftName' : IDL.Text,
   });
   
   return IDL.Service({
@@ -545,174 +125,16 @@ export const idlFactory = ({ IDL }) => {
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
-    'acceptMatchRequest' : IDL.Func([IDL.Principal], [], []),
-    'addLiveReaction' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'addStory' : IDL.Func([IDL.Text, IDL.Text], [], []),
-    'addStoryComment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'addStoryReaction' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'adminDeleteProfile' : IDL.Func([IDL.Principal], [], []),
-    'adminDeleteStory' : IDL.Func([IDL.Nat], [], []),
-    'adminGetAllStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-    'blockFromLive' : IDL.Func([IDL.Nat, IDL.Principal], [], []),
-    'consumeCallSignals' : IDL.Func([IDL.Principal], [IDL.Vec(CallSignal)], []),
-    'createOrUpdateProfile' : IDL.Func(
-        [
-          IDL.Text,
-          IDL.Nat,
-          Gender,
-          IDL.Text,
-          IDL.Text,
-          IDL.Text,
-          IDL.Opt(IDL.Text),
-          IDL.Text,
-          IDL.Text,
-          IDL.Text,
-          IDL.Text,
-          IDL.Vec(IDL.Text),
-          IDL.Vec(IDL.Text),
-          IDL.Text,
-          IDL.Vec(IDL.Text),
-          IDL.Vec(IDL.Text),
-          IDL.Text,
-          IDL.Text,
-          IDL.Vec(IDL.Text),
-          IDL.Text,
-          IDL.Opt(IDL.Text),
-        ],
-        [],
-        [],
-      ),
-    'declineMatchRequest' : IDL.Func([IDL.Principal], [], []),
-    'deleteMessage' : IDL.Func([IDL.Nat], [], []),
-    'deleteStory' : IDL.Func([IDL.Nat], [], []),
-    'editMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'endLive' : IDL.Func([IDL.Nat], [], []),
-    'getActiveLives' : IDL.Func([], [IDL.Vec(LiveStream)], ['query']),
-    'getAllProfiles' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-    'getAllWithRequestedCount' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Tuple(Profile, IDL.Nat))],
-        ['query'],
-      ),
-    'getCallHistory' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Tuple(CallHistory, Profile))],
-        ['query'],
-      ),
-    'getCallerStoryReaction' : IDL.Func(
-        [IDL.Nat],
-        [IDL.Opt(IDL.Text)],
-        ['query'],
-      ),
-    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(Profile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
-    'getDailySuggestions' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-    'getLiveMessages' : IDL.Func([IDL.Nat], [IDL.Vec(LiveMessage)], ['query']),
-    'getLiveReactions' : IDL.Func(
-        [IDL.Nat],
-        [IDL.Vec(LiveReaction)],
-        ['query'],
-      ),
-    'getLiveViewers' : IDL.Func([IDL.Nat], [IDL.Vec(Profile)], ['query']),
-    'getMatchRequests' : IDL.Func(
-        [],
-        [
-          IDL.Vec(
-            IDL.Tuple(
-              Profile,
-              IDL.Variant({
-                'pending' : IDL.Null,
-                'accepted' : IDL.Null,
-                'declined' : IDL.Null,
-              }),
-            )
-          ),
-        ],
-        ['query'],
-      ),
-    'getMessages' : IDL.Func(
-        [IDL.Principal],
-        [IDL.Vec(MessageWithMeta)],
-        ['query'],
-      ),
-    'getMutualMatches' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-    'getMyNotifications' : IDL.Func(
-        [],
-        [IDL.Vec(StoryNotification), IDL.Vec(SuperLikeNotification)],
-        ['query'],
-      ),
-    'getMyStoryNotifications' : IDL.Func(
-        [],
-        [IDL.Vec(StoryNotification)],
-        ['query'],
-      ),
-    'getPremiumStatus' : IDL.Func([], [IDL.Bool], ['query']),
-    'getPrivacyVisibility' : IDL.Func([], [PrivacyVisibility], ['query']),
-    'getProfileViewCount' : IDL.Func([], [IDL.Nat], ['query']),
-    'getProfileViewers' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Tuple(Profile, IDL.Int))],
-        ['query'],
-      ),
-    'getShowLastActive' : IDL.Func([], [IDL.Bool], ['query']),
-    'getStories' : IDL.Func([], [IDL.Vec(Story)], ['query']),
-    'getStoryComments' : IDL.Func(
-        [IDL.Nat],
-        [IDL.Vec(StoryComment)],
-        ['query'],
-      ),
-    'getStoryReactions' : IDL.Func(
-        [IDL.Nat],
-        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
-        ['query'],
-      ),
-    'getStoryViewCount' : IDL.Func([IDL.Nat], [IDL.Nat], ['query']),
-    'getStoryViewers' : IDL.Func([IDL.Nat], [IDL.Vec(Profile)], ['query']),
-    'getSuperLikeNotifications' : IDL.Func(
-        [],
-        [IDL.Vec(SuperLikeNotification)],
-        ['query'],
-      ),
-    'getSuperLikedBy' : IDL.Func([], [IDL.Vec(Profile)], ['query']),
-    'getTypingStatus' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
-    'getUserProfile' : IDL.Func([IDL.Principal], [IDL.Opt(Profile)], ['query']),
-    'hasLikedStory' : IDL.Func([IDL.Nat], [IDL.Bool], ['query']),
-    'hasSuperLiked' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
-    'isAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'getGiftsReceived' : IDL.Func([], [IDL.Vec(GiftRecord)], ['query']),
+    'getGiftsSent' : IDL.Func([], [IDL.Vec(GiftRecord)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-    'joinLive' : IDL.Func([IDL.Nat], [], []),
-    'leaveLive' : IDL.Func([IDL.Nat], [], []),
-    'likeStory' : IDL.Func([IDL.Nat], [], []),
-    'logCall' : IDL.Func(
-        [IDL.Principal, CallType, IDL.Nat, CallStatus],
-        [],
+    'sendGift' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [GiftRecord],
         [],
       ),
-    'markMessageRead' : IDL.Func([IDL.Nat], [], []),
-    'reactToMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'recordProfileView' : IDL.Func([IDL.Principal], [], []),
-    'recordStoryView' : IDL.Func([IDL.Nat], [], []),
-    'replyToStoryComment' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [], []),
-    'saveCallerUserProfile' : IDL.Func([Profile], [], []),
-    'searchProfiles' : IDL.Func([IDL.Text], [IDL.Vec(Profile)], ['query']),
-    'sendLiveMessage' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'sendMatchRequest' : IDL.Func([IDL.Principal], [], []),
-    'sendMessage' : IDL.Func([IDL.Principal, IDL.Text], [], []),
-    'setLiveFilter' : IDL.Func([IDL.Nat, LiveStreamFilter], [], []),
-    'setPremiumStatus' : IDL.Func([IDL.Bool], [], []),
-    'setPrivacyVisibility' : IDL.Func([PrivacyVisibility], [], []),
-    'setShowLastActive' : IDL.Func([IDL.Bool], [], []),
-    'setTyping' : IDL.Func([IDL.Principal, IDL.Bool], [], []),
-    'startLive' : IDL.Func([IDL.Text, IDL.Bool], [IDL.Nat], []),
-    'storeCallSignal' : IDL.Func(
-        [IDL.Principal, CallSignalType, IDL.Text, CallType],
-        [],
-        [],
-      ),
-    'superLikeUser' : IDL.Func([IDL.Principal], [], []),
-    'unlikeStory' : IDL.Func([IDL.Nat], [], []),
-    'unsuperLikeUser' : IDL.Func([IDL.Principal], [], []),
   });
 };
 

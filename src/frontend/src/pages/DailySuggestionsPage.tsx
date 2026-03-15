@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowLeft, Heart, Star, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Profile } from "../backend";
-import { useActor } from "../hooks/useActor";
+import { useAppActor as useActor } from "../hooks/useAppActor";
 import { useSendMatchRequest, useSuperLikeUser } from "../hooks/useQueries";
 
 interface DailySuggestionsPageProps {

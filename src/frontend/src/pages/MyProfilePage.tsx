@@ -136,11 +136,13 @@ interface MyProfilePageProps {
   onCallHistory?: () => void;
   onGoLive?: () => void;
   onSuggestions?: () => void;
+  onGiftHistory?: () => void;
 }
 export default function MyProfilePage({
   onCallHistory,
   onGoLive,
   onSuggestions,
+  onGiftHistory,
 }: MyProfilePageProps) {
   const { data: profile, isLoading } = useCallerProfile();
   const createProfile = useCreateProfile();
@@ -526,7 +528,7 @@ export default function MyProfilePage({
       <div className="relative h-56">
         {photoPreview || p?.photoUrl ? (
           <img
-            src={photoPreview || p?.photoUrl}
+            src={photoPreview || p?.photoUrl || undefined}
             alt={p?.name}
             className="w-full h-full object-cover"
           />
@@ -616,7 +618,10 @@ export default function MyProfilePage({
             </button>
             <button
               type="button"
-              onClick={logout}
+              onClick={() => {
+                localStorage.removeItem("bandhan_session");
+                logout();
+              }}
               data-ocid="myprofile.secondary_button"
               className="px-3 py-2 rounded-full flex items-center gap-2 text-sm text-white/70"
               style={{
@@ -628,8 +633,8 @@ export default function MyProfilePage({
               <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
-          {/* Row 2: Go Live | Suggestions */}
-          {(onGoLive || onSuggestions) && (
+          {/* Row 2: Go Live | Suggestions | Gift History */}
+          {(onGoLive || onSuggestions || onGiftHistory) && (
             <div className="flex gap-1.5">
               {onGoLive && (
                 <button
@@ -658,6 +663,21 @@ export default function MyProfilePage({
                   }}
                 >
                   ✨ Suggestions
+                </button>
+              )}
+              {onGiftHistory && (
+                <button
+                  type="button"
+                  onClick={onGiftHistory}
+                  data-ocid="myprofile.secondary_button"
+                  className="px-3 py-2 rounded-full flex items-center gap-1.5 text-sm font-medium text-white"
+                  style={{
+                    background: "rgba(225,29,72,0.45)",
+                    backdropFilter: "blur(8px)",
+                  }}
+                  title="Gift History"
+                >
+                  🎁 Gifts
                 </button>
               )}
             </div>

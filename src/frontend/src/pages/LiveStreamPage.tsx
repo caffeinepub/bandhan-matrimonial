@@ -26,7 +26,7 @@ import type {
   LiveStream,
   Profile,
 } from "../backend";
-import { useActor } from "../hooks/useActor";
+import { useAppActor as useActor } from "../hooks/useAppActor";
 import { useCallerProfile } from "../hooks/useQueries";
 
 interface LiveStreamPageProps {
@@ -331,7 +331,7 @@ export default function LiveStreamPage({
               />
               <div className="absolute inset-8 flex items-center justify-center">
                 <Avatar className="w-16 h-16 border-2 border-white/40">
-                  <AvatarImage src={hostPhoto} />
+                  <AvatarImage src={hostPhoto ?? undefined} />
                   <AvatarFallback
                     className="text-2xl"
                     style={{
@@ -348,7 +348,7 @@ export default function LiveStreamPage({
         {isAudio && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <Avatar className="w-24 h-24 border-4 border-pink-500/60 mb-4">
-              <AvatarImage src={hostPhoto} />
+              <AvatarImage src={hostPhoto ?? undefined} />
               <AvatarFallback
                 className="text-3xl"
                 style={{
@@ -720,7 +720,7 @@ export default function LiveStreamPage({
                   style={{ background: "oklch(0.14 0.05 300)" }}
                 >
                   <Avatar className="w-9 h-9">
-                    <AvatarImage src={v.photoUrl} />
+                    <AvatarImage src={v.photoUrl ?? undefined} />
                     <AvatarFallback
                       style={{
                         background: "linear-gradient(135deg,#e11d48,#7c3aed)",

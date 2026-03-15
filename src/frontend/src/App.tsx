@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { Principal } from "@dfinity/principal";
 import { useCallback, useEffect, useState } from "react";
 import type { Profile } from "./backend";
 import { CallType } from "./backend";
@@ -8,6 +9,9 @@ import {
   IncomingCallOverlay,
   useIncomingCallPoller,
 } from "./components/IncomingCallOverlay";
+import PushNotificationBanner from "./components/PushNotificationBanner";
+import type { PushNotif } from "./components/PushNotificationBanner";
+import { useAppActor } from "./hooks/useAppActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import {
   useCallerProfile,
@@ -21,10 +25,12 @@ import CallHistoryPage from "./pages/CallHistoryPage";
 import ChatPage from "./pages/ChatPage";
 import ConversationPage from "./pages/ConversationPage";
 import DailySuggestionsPage from "./pages/DailySuggestionsPage";
+import GiftHistoryPage from "./pages/GiftHistoryPage";
 import LiveStreamListPage from "./pages/LiveStreamListPage";
 import LiveStreamPage from "./pages/LiveStreamPage";
 import LoginPage from "./pages/LoginPage";
 import MatchesPage from "./pages/MatchesPage";
+import MessageRequestsPage from "./pages/MessageRequestsPage";
 import MyProfilePage from "./pages/MyProfilePage";
 import NotificationHistoryPage from "./pages/NotificationHistoryPage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
@@ -48,12 +54,41 @@ export type Page =
   | "notifications"
   | "liveStreamList"
   | "liveStream"
-  | "dailySuggestions";
+  | "dailySuggestions"
+  | "messageRequests"
+  | "giftHistory";
 
 interface IncomingCallInfo {
   fromProfile: Profile;
   callType: CallType;
   offerData: string;
+}
+
+function safeJsonParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    try {
+      localStorage.removeItem("bandhan_session");
+    } catch {}
+    return fallback;
+  }
+}
+
+function getMsgRequestCount(): number {
+  const total = 4;
+  try {
+    const deleted = JSON.parse(
+      localStorage.getItem("msgRequestsDeleted") || "[]",
+    ).length;
+    const accepted = JSON.parse(
+      localStorage.getItem("msgRequestsAccepted") || "[]",
+    ).length;
+    return Math.max(0, total - deleted - accepted);
+  } catch {
+    return 0;
+  }
 }
 
 export default function App() {
@@ -74,18 +109,73 @@ export default function App() {
   const [activeLiveMode, setActiveLiveMode] = useState<"video" | "audio">(
     "video",
   );
+  const [localSession] = useState(() =>
+    safeJsonParse(
+      localStorage.getItem("bandhan_session"),
+      null as Record<string, unknown> | null,
+    ),
+  );
+  const [msgReqCount, setMsgReqCount] = useState(getMsgRequestCount);
+  const [pushNotif, setPushNotif] = useState<PushNotif | null>(null);
 
-  const { data: profile, isLoading: profileLoading } = useCallerProfile();
+  const { isFetching: actorFetching } = useAppActor();
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    isFetching: profileFetching,
+  } = useCallerProfile();
   const { data: isAdmin } = useIsAdmin();
   const { data: mutualMatches = [] } = useMutualMatches();
   const storeSignal = useStoreCallSignal();
 
-  const isLoggedIn = !!identity;
-  const needsProfile = isLoggedIn && !profileLoading && profile === null;
+  const isLoggedIn = !!identity || !!localSession;
+  const needsProfile =
+    isLoggedIn &&
+    !profileLoading &&
+    !profileFetching &&
+    !actorFetching &&
+    profile === null &&
+    !localSession;
   const isInCall = currentPage === "voiceCall" || currentPage === "videoCall";
 
   useEffect(() => {
     if (!isLoggedIn) setCurrentPage("browse");
+  }, [isLoggedIn]);
+
+  // Simulate push notification for demo (fires once 8s after mounting)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally fire once on login
+  useEffect(() => {
+    if (!isLoggedIn || mutualMatches.length === 0) return;
+    const firstMatch = mutualMatches[0];
+    const t = setTimeout(() => {
+      const previews = [
+        "Hey! How are you doing? 😊",
+        "I loved your profile!",
+        "Are you free to chat? 💬",
+      ];
+      // Suppress notification if this conversation is muted
+      let isMutedConv = false;
+      try {
+        const mutedRaw = localStorage.getItem("muted_conversations");
+        if (mutedRaw) {
+          const mutedIds: string[] = JSON.parse(mutedRaw);
+          isMutedConv = mutedIds.includes(firstMatch.userId.toString());
+        }
+      } catch {}
+      if (!isMutedConv) {
+        setPushNotif({
+          id: `push_${Date.now()}`,
+          senderName: firstMatch.name,
+          senderAvatar: undefined,
+          preview: previews[Math.floor(Math.random() * previews.length)],
+          onTap: () => {
+            setSelectedMatchForChat(firstMatch);
+            setCurrentPage("conversation");
+          },
+        });
+      }
+    }, 8000);
+    return () => clearTimeout(t);
   }, [isLoggedIn]);
 
   const handleIncomingCall = useCallback((info: IncomingCallInfo) => {
@@ -122,7 +212,7 @@ export default function App() {
     setIncomingCall(null);
   };
 
-  if (isInitializing || profileLoading) {
+  if (isInitializing || profileLoading || actorFetching) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -239,6 +329,42 @@ export default function App() {
       </>
     );
   }
+  if (currentPage === "messageRequests") {
+    return (
+      <>
+        <MessageRequestsPage
+          onBack={() => {
+            setCurrentPage("chat");
+            setMsgReqCount(getMsgRequestCount());
+          }}
+          onOpenConversation={(req) => {
+            const mockProfile: Profile = {
+              userId: Principal.fromUint8Array(
+                new Uint8Array([req.id.charCodeAt(1) || 1]),
+              ),
+              name: req.name,
+              age: 25n,
+              bio: "",
+              occupation: "",
+              height: "",
+              aboutMe: "",
+              favoriteSongs: [],
+              interests: [],
+              mood: "",
+              createdAt: BigInt(Date.now()) * 1_000_000n,
+              education: "",
+              motherTongue: "",
+              gender: { Female: null } as any,
+            } as unknown as Profile;
+            setSelectedMatchForChat(mockProfile);
+            setCurrentPage("conversation");
+            setMsgReqCount(getMsgRequestCount());
+          }}
+        />
+        <Toaster />
+      </>
+    );
+  }
   if (currentPage === "viewProfile" && selectedProfile) {
     return (
       <>
@@ -325,6 +451,7 @@ export default function App() {
               setSelectedMatchForChat(p);
               setCurrentPage("conversation");
             }}
+            onMessageRequests={() => setCurrentPage("messageRequests")}
           />
         )}
         {currentPage === "profile" && (
@@ -332,7 +459,11 @@ export default function App() {
             onCallHistory={() => setCurrentPage("callHistory")}
             onGoLive={() => setCurrentPage("liveStreamList")}
             onSuggestions={() => setCurrentPage("dailySuggestions")}
+            onGiftHistory={() => setCurrentPage("giftHistory")}
           />
+        )}
+        {currentPage === "giftHistory" && (
+          <GiftHistoryPage onBack={() => setCurrentPage("profile")} />
         )}
         {currentPage === "admin" && isAdmin && <AdminPage />}
       </main>
@@ -340,11 +471,16 @@ export default function App() {
         currentPage={currentPage}
         onNavigate={setCurrentPage}
         isAdmin={!!isAdmin}
+        messageRequestCount={msgReqCount}
       />
       <IncomingCallOverlay
         incomingCall={incomingCall}
         onAccept={handleAcceptCall}
         onDecline={handleDeclineCall}
+      />
+      <PushNotificationBanner
+        notification={pushNotif}
+        onDismiss={() => setPushNotif(null)}
       />
       <Toaster />
     </div>

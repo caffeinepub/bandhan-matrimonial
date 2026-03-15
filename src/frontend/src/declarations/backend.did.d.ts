@@ -10,137 +10,13 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface CallHistory {
-  'status' : CallStatus,
-  'withUserId' : Principal,
-  'callType' : CallType,
-  'durationSeconds' : bigint,
-  'timestamp' : bigint,
-}
-export interface CallSignal {
+export interface GiftRecord {
   'id' : bigint,
-  'data' : string,
-  'toUserId' : Principal,
-  'callType' : CallType,
-  'fromUserId' : Principal,
-  'timestamp' : bigint,
-  'signalType' : CallSignalType,
-}
-export type CallSignalType = { 'iceCandidate' : null } |
-  { 'offer' : null } |
-  { 'callEnd' : null } |
-  { 'answer' : null } |
-  { 'callDecline' : null };
-export type CallStatus = { 'completed' : null } |
-  { 'missed' : null } |
-  { 'declined' : null };
-export type CallType = { 'video' : null } |
-  { 'voice' : null };
-export type Gender = { 'other' : null } |
-  { 'female' : null } |
-  { 'male' : null };
-export interface LiveMessage {
-  'id' : bigint,
-  'userName' : string,
-  'userId' : Principal,
-  'text' : string,
-  'timestamp' : bigint,
-  'liveId' : bigint,
-}
-export interface LiveReaction {
-  'userId' : Principal,
-  'emoji' : string,
-  'timestamp' : bigint,
-  'liveId' : bigint,
-}
-export interface LiveStream {
-  'id' : bigint,
-  'title' : string,
-  'startedAt' : bigint,
-  'matchesOnly' : boolean,
-  'hostName' : string,
-  'isActive' : boolean,
-  'hostId' : Principal,
-  'hostPhoto' : [] | [string],
-  'filterSetting' : LiveStreamFilter,
-}
-export type LiveStreamFilter = { 'all' : null } |
-  { 'gender' : Gender } |
-  { 'religion' : string };
-export interface MessageWithMeta {
-  'id' : bigint,
-  'isDeleted' : boolean,
-  'read' : boolean,
-  'text' : string,
+  'giftEmoji' : string,
   'toUserId' : Principal,
   'fromUserId' : Principal,
   'timestamp' : bigint,
-  'reaction' : [] | [string],
-}
-export type PrivacyVisibility = { 'everyone' : null } |
-  { 'matchesOnly' : null } |
-  { 'hidden' : null };
-export interface Profile {
-  'age' : bigint,
-  'bio' : string,
-  'occupation' : string,
-  'height' : string,
-  'aboutMe' : string,
-  'favoriteSongs' : Array<string>,
-  'interests' : Array<string>,
-  'userId' : Principal,
-  'mood' : string,
-  'name' : string,
-  'createdAt' : bigint,
-  'education' : string,
-  'photoUrl' : [] | [string],
-  'motherTongue' : string,
-  'gender' : Gender,
-  'favoriteMovies' : Array<string>,
-  'mediaUrls' : Array<string>,
-  'phone' : [] | [string],
-  'religion' : string,
-  'thoughts' : string,
-  'maritalStatus' : string,
-  'location' : string,
-  'hobbies' : Array<string>,
-}
-export interface Story {
-  'id' : bigint,
-  'userId' : Principal,
-  'authorName' : string,
-  'authorPhoto' : [] | [string],
-  'imageUrl' : string,
-  'timestamp' : bigint,
-  'caption' : string,
-  'likesCount' : bigint,
-}
-export interface StoryComment {
-  'id' : bigint,
-  'parentCommentId' : [] | [bigint],
-  'userId' : Principal,
-  'storyId' : bigint,
-  'text' : string,
-  'authorName' : string,
-  'timestamp' : bigint,
-}
-export type StoryNotifType = { 'like' : null } |
-  { 'comment' : null } |
-  { 'reply' : null };
-export interface StoryNotification {
-  'id' : bigint,
-  'actorName' : string,
-  'notifType' : StoryNotifType,
-  'storyId' : bigint,
-  'storyOwnerId' : Principal,
-  'actorPhoto' : [] | [string],
-  'text' : string,
-  'actorUserId' : Principal,
-  'timestamp' : bigint,
-}
-export interface SuperLikeNotification {
-  'fromProfile' : Profile,
-  'timestamp' : bigint,
+  'giftName' : string,
 }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
@@ -173,122 +49,12 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
-  'acceptMatchRequest' : ActorMethod<[Principal], undefined>,
-  'addLiveReaction' : ActorMethod<[bigint, string], undefined>,
-  'addStory' : ActorMethod<[string, string], undefined>,
-  'addStoryComment' : ActorMethod<[bigint, string], undefined>,
-  'addStoryReaction' : ActorMethod<[bigint, string], undefined>,
-  'adminDeleteProfile' : ActorMethod<[Principal], undefined>,
-  'adminDeleteStory' : ActorMethod<[bigint], undefined>,
-  'adminGetAllStories' : ActorMethod<[], Array<Story>>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
-  'blockFromLive' : ActorMethod<[bigint, Principal], undefined>,
-  'consumeCallSignals' : ActorMethod<[Principal], Array<CallSignal>>,
-  'createOrUpdateProfile' : ActorMethod<
-    [
-      string,
-      bigint,
-      Gender,
-      string,
-      string,
-      string,
-      [] | [string],
-      string,
-      string,
-      string,
-      string,
-      Array<string>,
-      Array<string>,
-      string,
-      Array<string>,
-      Array<string>,
-      string,
-      string,
-      Array<string>,
-      string,
-      [] | [string],
-    ],
-    undefined
-  >,
-  'declineMatchRequest' : ActorMethod<[Principal], undefined>,
-  'deleteMessage' : ActorMethod<[bigint], undefined>,
-  'deleteStory' : ActorMethod<[bigint], undefined>,
-  'editMessage' : ActorMethod<[bigint, string], undefined>,
-  'endLive' : ActorMethod<[bigint], undefined>,
-  'getActiveLives' : ActorMethod<[], Array<LiveStream>>,
-  'getAllProfiles' : ActorMethod<[], Array<Profile>>,
-  'getAllWithRequestedCount' : ActorMethod<[], Array<[Profile, bigint]>>,
-  'getCallHistory' : ActorMethod<[], Array<[CallHistory, Profile]>>,
-  'getCallerStoryReaction' : ActorMethod<[bigint], [] | [string]>,
-  'getCallerUserProfile' : ActorMethod<[], [] | [Profile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
-  'getDailySuggestions' : ActorMethod<[], Array<Profile>>,
-  'getLiveMessages' : ActorMethod<[bigint], Array<LiveMessage>>,
-  'getLiveReactions' : ActorMethod<[bigint], Array<LiveReaction>>,
-  'getLiveViewers' : ActorMethod<[bigint], Array<Profile>>,
-  'getMatchRequests' : ActorMethod<
-    [],
-    Array<
-      [
-        Profile,
-        { 'pending' : null } |
-          { 'accepted' : null } |
-          { 'declined' : null },
-      ]
-    >
-  >,
-  'getMessages' : ActorMethod<[Principal], Array<MessageWithMeta>>,
-  'getMutualMatches' : ActorMethod<[], Array<Profile>>,
-  'getMyNotifications' : ActorMethod<
-    [],
-    [Array<StoryNotification>, Array<SuperLikeNotification>]
-  >,
-  'getMyStoryNotifications' : ActorMethod<[], Array<StoryNotification>>,
-  'getPremiumStatus' : ActorMethod<[], boolean>,
-  'getPrivacyVisibility' : ActorMethod<[], PrivacyVisibility>,
-  'getProfileViewCount' : ActorMethod<[], bigint>,
-  'getProfileViewers' : ActorMethod<[], Array<[Profile, bigint]>>,
-  'getShowLastActive' : ActorMethod<[], boolean>,
-  'getStories' : ActorMethod<[], Array<Story>>,
-  'getStoryComments' : ActorMethod<[bigint], Array<StoryComment>>,
-  'getStoryReactions' : ActorMethod<[bigint], Array<[string, bigint]>>,
-  'getStoryViewCount' : ActorMethod<[bigint], bigint>,
-  'getStoryViewers' : ActorMethod<[bigint], Array<Profile>>,
-  'getSuperLikeNotifications' : ActorMethod<[], Array<SuperLikeNotification>>,
-  'getSuperLikedBy' : ActorMethod<[], Array<Profile>>,
-  'getTypingStatus' : ActorMethod<[Principal], boolean>,
-  'getUserProfile' : ActorMethod<[Principal], [] | [Profile]>,
-  'hasLikedStory' : ActorMethod<[bigint], boolean>,
-  'hasSuperLiked' : ActorMethod<[Principal], boolean>,
-  'isAdmin' : ActorMethod<[], boolean>,
+  'getGiftsReceived' : ActorMethod<[], Array<GiftRecord>>,
+  'getGiftsSent' : ActorMethod<[], Array<GiftRecord>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'joinLive' : ActorMethod<[bigint], undefined>,
-  'leaveLive' : ActorMethod<[bigint], undefined>,
-  'likeStory' : ActorMethod<[bigint], undefined>,
-  'logCall' : ActorMethod<[Principal, CallType, bigint, CallStatus], undefined>,
-  'markMessageRead' : ActorMethod<[bigint], undefined>,
-  'reactToMessage' : ActorMethod<[bigint, string], undefined>,
-  'recordProfileView' : ActorMethod<[Principal], undefined>,
-  'recordStoryView' : ActorMethod<[bigint], undefined>,
-  'replyToStoryComment' : ActorMethod<[bigint, bigint, string], undefined>,
-  'saveCallerUserProfile' : ActorMethod<[Profile], undefined>,
-  'searchProfiles' : ActorMethod<[string], Array<Profile>>,
-  'sendLiveMessage' : ActorMethod<[bigint, string], undefined>,
-  'sendMatchRequest' : ActorMethod<[Principal], undefined>,
-  'sendMessage' : ActorMethod<[Principal, string], undefined>,
-  'setLiveFilter' : ActorMethod<[bigint, LiveStreamFilter], undefined>,
-  'setPremiumStatus' : ActorMethod<[boolean], undefined>,
-  'setPrivacyVisibility' : ActorMethod<[PrivacyVisibility], undefined>,
-  'setShowLastActive' : ActorMethod<[boolean], undefined>,
-  'setTyping' : ActorMethod<[Principal, boolean], undefined>,
-  'startLive' : ActorMethod<[string, boolean], bigint>,
-  'storeCallSignal' : ActorMethod<
-    [Principal, CallSignalType, string, CallType],
-    undefined
-  >,
-  'superLikeUser' : ActorMethod<[Principal], undefined>,
-  'unlikeStory' : ActorMethod<[bigint], undefined>,
-  'unsuperLikeUser' : ActorMethod<[Principal], undefined>,
+  'sendGift' : ActorMethod<[Principal, string, string], GiftRecord>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
