@@ -1,4 +1,4 @@
-import { Bell } from "lucide-react";
+import { Bell, Heart } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
   Profile,
@@ -124,10 +124,14 @@ function storyNotifType(
 }
 
 interface NotificationBellProps {
+  useHeartIcon?: boolean;
   onViewAll?: () => void;
 }
 
-export default function NotificationBell({ onViewAll }: NotificationBellProps) {
+export default function NotificationBell({
+  onViewAll,
+  useHeartIcon,
+}: NotificationBellProps) {
   const [open, setOpen] = useState(false);
   const [seenIds, setSeenIds] = useState<Set<string>>(getSeenIds);
   const [notifTimestamps, setNotifTimestamps] = useState<
@@ -321,10 +325,21 @@ export default function NotificationBell({ onViewAll }: NotificationBellProps) {
           border: "1px solid oklch(0.28 0.07 300)",
         }}
       >
-        <Bell
-          className="w-4.5 h-4.5 text-white/80"
-          style={{ width: 18, height: 18 }}
-        />
+        {useHeartIcon ? (
+          <Heart
+            className="w-4.5 h-4.5 text-white/80"
+            style={{
+              width: 18,
+              height: 18,
+              fill: unreadCount > 0 ? "rgba(255,255,255,0.8)" : "none",
+            }}
+          />
+        ) : (
+          <Bell
+            className="w-4.5 h-4.5 text-white/80"
+            style={{ width: 18, height: 18 }}
+          />
+        )}
         {unreadCount > 0 && (
           <span
             className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full text-[10px] font-bold text-white flex items-center justify-center px-1"

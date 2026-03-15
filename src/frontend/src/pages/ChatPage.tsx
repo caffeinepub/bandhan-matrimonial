@@ -1,10 +1,12 @@
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Edit, Menu, Plus, Search } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Profile } from "../backend";
 import StoryViewerModal from "../components/StoryViewerModal";
 import { useAddStory, useMutualMatches, useStories } from "../hooks/useQueries";
 import { useStorageUpload } from "../hooks/useStorageUpload";
+
+const STORY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 interface Props {
   onOpenConversation: (p: Profile) => void;
@@ -21,9 +23,22 @@ function OnlineDot({ show }: { show: boolean }) {
   );
 }
 
+const FAKE_TIMES = [
+  "2m",
+  "15m",
+  "1h",
+  "3h",
+  "now",
+  "5m",
+  "30m",
+  "2h",
+  "4h",
+  "6m",
+];
+
 export default function ChatPage({ onOpenConversation }: Props) {
   const { data: matches = [], isLoading } = useMutualMatches();
-  const { data: stories = [] } = useStories();
+  const { data: allStories = [] } = useStories();
   const addStory = useAddStory();
   const { uploadFile, uploading, progress } = useStorageUpload();
   const [viewingStoryIndex, setViewingStoryIndex] = useState<number | null>(
@@ -31,6 +46,10 @@ export default function ChatPage({ onOpenConversation }: Props) {
   );
   const [chatSearch, setChatSearch] = useState("");
   const storyFileRef = useRef<HTMLInputElement>(null);
+
+  const stories = allStories.filter(
+    (s) => Date.now() - Number(s.timestamp) / 1_000_000 <= STORY_MAX_AGE_MS,
+  );
 
   const handleAddStory = () => {
     storyFileRef.current?.click();
@@ -46,7 +65,6 @@ export default function ChatPage({ onOpenConversation }: Props) {
       const caption = window.prompt("Add a caption (optional):") ?? "";
       await addStory.mutateAsync({ imageUrl: url, caption });
     } catch {}
-    // reset input
     e.target.value = "";
   };
 
@@ -57,7 +75,7 @@ export default function ChatPage({ onOpenConversation }: Props) {
     : matches;
 
   return (
-    <div className="min-h-screen pt-14 pb-4" style={{ background: "#0a0010" }}>
+    <div className="min-h-screen pb-4" style={{ background: "#0a0010" }}>
       <input
         ref={storyFileRef}
         type="file"
@@ -67,22 +85,61 @@ export default function ChatPage({ onOpenConversation }: Props) {
         data-ocid="chat.dropzone"
       />
 
-      <div className="px-5 py-4">
-        <h1 className="text-2xl font-bold text-white">Messages</h1>
+      {/* Messenger-style Header */}
+      <div
+        className="flex items-center justify-between px-4 pt-12 pb-3"
+        style={{ background: "#0a0010" }}
+      >
+        <button
+          type="button"
+          data-ocid="chat.button"
+          className="w-9 h-9 rounded-full flex items-center justify-center"
+          style={{ background: "oklch(0.15 0.05 300)" }}
+        >
+          <Menu className="w-5 h-5 text-white/70" />
+        </button>
+        <h1 className="text-xl font-bold text-white tracking-tight">Chats</h1>
+        <button
+          type="button"
+          data-ocid="chat.secondary_button"
+          className="w-9 h-9 rounded-full flex items-center justify-center"
+          style={{ background: "oklch(0.15 0.05 300)" }}
+        >
+          <Edit className="w-4 h-4 text-white/70" />
+        </button>
       </div>
 
-      {/* Stories */}
-      <div className="px-5 mb-4">
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+      {/* Pill search bar */}
+      <div className="px-4 mb-4">
+        <div
+          className="flex items-center gap-2 h-10 rounded-full px-4"
+          style={{ background: "oklch(0.16 0.05 300)" }}
+        >
+          <Search className="w-4 h-4 text-white/40 flex-shrink-0" />
+          <Input
+            type="text"
+            placeholder="Search or start new chat"
+            value={chatSearch}
+            onChange={(e) => setChatSearch(e.target.value)}
+            data-ocid="chat.search_input"
+            className="flex-1 h-8 text-sm text-white placeholder:text-white/35 bg-transparent border-none shadow-none focus-visible:ring-0 p-0"
+          />
+        </div>
+      </div>
+
+      {/* Active contacts row */}
+      <div className="px-4 mb-5">
+        <div className="flex gap-4 overflow-x-auto pb-1 scrollbar-none">
+          {/* Add story button */}
           <button
             type="button"
             onClick={handleAddStory}
             data-ocid="chat.upload_button"
-            className="flex-shrink-0 flex flex-col items-center gap-1"
+            className="flex flex-col items-center gap-1 flex-shrink-0"
             disabled={uploading}
           >
             <div
-              className="w-14 h-14 rounded-full flex items-center justify-center relative"
+              className="relative w-14 h-14 rounded-full flex items-center justify-center"
               style={{
                 background: "oklch(0.18 0.06 300)",
                 border: "2px dashed oklch(0.35 0.1 300)",
@@ -93,72 +150,106 @@ export default function ChatPage({ onOpenConversation }: Props) {
                   {progress}%
                 </span>
               ) : (
-                <Plus className="w-6 h-6 text-white/60" />
+                <Plus className="w-5 h-5 text-white/60" />
               )}
             </div>
             <span className="text-white/50 text-[10px]">
-              {uploading ? "Uploading..." : "Add Story"}
+              {uploading ? "..." : "Story"}
             </span>
           </button>
-          {stories.map((story) => (
-            <button
-              key={story.id.toString()}
-              type="button"
-              onClick={() => setViewingStoryIndex(stories.indexOf(story))}
-              data-ocid="chat.secondary_button"
-              className="flex-shrink-0 flex flex-col items-center gap-1"
-            >
-              <div
-                className="w-14 h-14 rounded-full overflow-hidden p-0.5"
-                style={{
-                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
-                }}
+
+          {/* Active story contacts */}
+          {matches.slice(0, 10).map((profile, i) => {
+            const hasStory = stories.some((s) => s.authorName === profile.name);
+            const storyIdx = hasStory
+              ? stories.findIndex((s) => s.authorName === profile.name)
+              : -1;
+            return (
+              <button
+                key={profile.userId.toString()}
+                type="button"
+                data-ocid={`chat.item.${i + 1}`}
+                className="flex flex-col items-center gap-1 flex-shrink-0"
+                onClick={() =>
+                  hasStory && storyIdx >= 0
+                    ? setViewingStoryIndex(storyIdx)
+                    : onOpenConversation(profile)
+                }
               >
-                <div
-                  className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
-                  style={{ background: "#1a0a1e" }}
-                >
-                  {story.authorPhoto ? (
-                    <img
-                      src={story.authorPhoto}
-                      alt={story.authorName}
-                      className="w-full h-full object-cover"
+                <div className="relative" style={{ width: 56, height: 56 }}>
+                  {hasStory && (
+                    <svg
+                      width={56}
+                      height={56}
+                      viewBox="0 0 56 56"
+                      style={{ position: "absolute", top: 0, left: 0 }}
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        <linearGradient
+                          id={`cg${i}`}
+                          x1="0%"
+                          y1="0%"
+                          x2="100%"
+                          y2="100%"
+                        >
+                          <stop offset="0%" stopColor="#e11d48" />
+                          <stop offset="100%" stopColor="#a855f7" />
+                        </linearGradient>
+                      </defs>
+                      <circle
+                        cx={28}
+                        cy={28}
+                        r={25}
+                        fill="none"
+                        stroke={`url(#cg${i})`}
+                        strokeWidth={2.5}
+                      />
+                    </svg>
+                  )}
+                  <div
+                    className="absolute rounded-full overflow-hidden"
+                    style={{
+                      inset: hasStory ? 4 : 2,
+                      background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                    }}
+                  >
+                    {profile.photoUrl ? (
+                      <img
+                        src={profile.photoUrl}
+                        alt={profile.name}
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white font-bold">
+                        {profile.name.charAt(0)}
+                      </div>
+                    )}
+                  </div>
+                  {/* Online dot */}
+                  {i % 3 === 0 && (
+                    <span
+                      className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-400"
+                      style={{ border: "2px solid #0a0010" }}
                     />
-                  ) : (
-                    <span className="w-full h-full flex items-center justify-center text-white font-bold text-lg">
-                      {story.authorName.charAt(0)}
-                    </span>
                   )}
                 </div>
-              </div>
-              <span className="text-white/60 text-[10px] max-w-[56px] truncate">
-                {story.authorName}
-              </span>
-            </button>
-          ))}
+                <span className="text-white/60 text-[10px] w-14 text-center truncate">
+                  {profile.name.split(" ")[0]}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-5 mb-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-          <Input
-            type="text"
-            placeholder="Search conversations..."
-            value={chatSearch}
-            onChange={(e) => setChatSearch(e.target.value)}
-            data-ocid="chat.search_input"
-            className="pl-9 h-10 text-sm text-white placeholder:text-white/30 rounded-xl"
-            style={{
-              background: "oklch(0.13 0.05 300)",
-              border: "1px solid oklch(0.22 0.06 300)",
-            }}
-          />
-        </div>
-      </div>
+      {/* Divider */}
+      <div
+        className="mx-4 mb-3"
+        style={{ height: 1, background: "oklch(0.2 0.05 300)" }}
+      />
 
-      {/* Chats */}
+      {/* Chat list */}
       {isLoading && (
         <div
           className="flex justify-center py-8"
@@ -189,19 +280,19 @@ export default function ChatPage({ onOpenConversation }: Props) {
           </p>
         </div>
       )}
-      <div className="px-5 space-y-1">
+
+      <div className="space-y-0">
         {filteredMatches.map((profile, i) => (
           <button
             key={profile.userId.toString()}
             type="button"
             onClick={() => onOpenConversation(profile)}
             data-ocid={`chat.item.${i + 1}`}
-            className="w-full flex items-center gap-3 p-3 rounded-2xl transition-all active:scale-[0.98]"
-            style={{ background: "oklch(0.13 0.05 300)" }}
+            className="w-full flex items-center gap-3 px-4 py-3 transition-all active:bg-white/5"
           >
             <div className="relative flex-shrink-0">
               <div
-                className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center"
+                className="w-14 h-14 rounded-full overflow-hidden"
                 style={{
                   background: "linear-gradient(135deg,#e11d48,#7c3aed)",
                   padding: 2,
@@ -232,13 +323,18 @@ export default function ChatPage({ onOpenConversation }: Props) {
                 {profile.bio || "Tap to start chatting"}
               </p>
             </div>
-            <div className="flex-shrink-0 text-right">
-              <div
-                className="w-2 h-2 rounded-full ml-auto"
-                style={{
-                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
-                }}
-              />
+            <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
+              <span className="text-white/35 text-[10px]">
+                {FAKE_TIMES[i % FAKE_TIMES.length]}
+              </span>
+              {i % 2 === 0 && (
+                <div
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{
+                    background: "linear-gradient(135deg,#3b82f6,#06b6d4)",
+                  }}
+                />
+              )}
             </div>
           </button>
         ))}

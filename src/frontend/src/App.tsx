@@ -71,6 +71,9 @@ export default function App() {
   );
   const [activeLiveId, setActiveLiveId] = useState<bigint | null>(null);
   const [isLiveHost, setIsLiveHost] = useState(false);
+  const [activeLiveMode, setActiveLiveMode] = useState<"video" | "audio">(
+    "video",
+  );
 
   const { data: profile, isLoading: profileLoading } = useCallerProfile();
   const { data: isAdmin } = useIsAdmin();
@@ -100,56 +103,51 @@ export default function App() {
     setSelectedProfile(incomingCall.fromProfile);
     setIsInitiator(false);
     setInitialOfferData(incomingCall.offerData);
-    setCurrentPage(
-      incomingCall.callType === CallType.video ? "videoCall" : "voiceCall",
-    );
+    const page =
+      incomingCall.callType === CallType.video ? "videoCall" : "voiceCall";
+    setCurrentPage(page);
     setIncomingCall(null);
   };
 
-  const handleDeclineCall = async () => {
+  const handleDeclineCall = () => {
     if (!incomingCall) return;
-    try {
-      await storeSignal.mutateAsync({
+    if (storeSignal) {
+      storeSignal.mutate({
         toUserId: incomingCall.fromProfile.userId,
         signalType: CallSignalType.callDecline,
-        data: "",
         callType: incomingCall.callType,
+        data: "",
       });
-    } catch {}
+    }
     setIncomingCall(null);
   };
 
-  if (isInitializing) {
+  if (isInitializing || profileLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4" data-ocid="app.loading_state">
-          <div className="relative w-16 h-16 mx-auto">
-            <div
-              className="w-16 h-16 rounded-full border-2 animate-spin"
-              style={{
-                borderColor: "oklch(0.65 0.22 10 / 0.3)",
-                borderTopColor: "oklch(0.65 0.22 10)",
-              }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-2xl">💍</span>
-            </div>
-          </div>
-          <p className="text-muted-foreground font-body text-sm">
-            Loading Bandhan...
-          </p>
-        </div>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#0a0010" }}
+      >
+        <div
+          className="w-10 h-10 rounded-full border-2 animate-spin"
+          style={{
+            borderColor: "oklch(0.65 0.22 10/0.3)",
+            borderTopColor: "oklch(0.65 0.22 10)",
+          }}
+        />
       </div>
     );
   }
 
-  if (!isLoggedIn)
+  if (!isLoggedIn) {
     return (
       <>
         <LoginPage />
         <Toaster />
       </>
     );
+  }
+
   if (needsProfile)
     return (
       <>
@@ -209,9 +207,10 @@ export default function App() {
       <>
         <LiveStreamListPage
           onBack={() => setCurrentPage("browse")}
-          onJoinLive={(liveId, host) => {
+          onJoinLive={(liveId, host, liveMode) => {
             setActiveLiveId(liveId);
             setIsLiveHost(host);
+            setActiveLiveMode(liveMode ?? "video");
             setCurrentPage("liveStream");
           }}
         />
@@ -225,6 +224,7 @@ export default function App() {
         <LiveStreamPage
           liveId={activeLiveId}
           isHost={isLiveHost}
+          liveMode={activeLiveMode}
           onBack={() => setCurrentPage("liveStreamList")}
         />
         <Toaster />

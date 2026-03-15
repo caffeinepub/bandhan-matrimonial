@@ -9,7 +9,16 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Mic, MicOff, Send, Settings, Users, X } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  Mic,
+  MicOff,
+  Send,
+  Settings,
+  Users,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   LiveMessage,
@@ -24,6 +33,7 @@ interface LiveStreamPageProps {
   liveId: bigint;
   isHost: boolean;
   onBack: () => void;
+  liveMode?: "video" | "audio";
 }
 
 const REACTION_EMOJIS = ["❤️", "🔥", "😂", "😮", "😢", "👏"];
@@ -42,10 +52,19 @@ interface FloatingReaction {
   x: number;
 }
 
+type JoinRequestStatus = "idle" | "pending" | "accepted" | "declined";
+
+interface PendingJoinRequest {
+  id: string;
+  userName: string;
+  mode: "audio" | "video";
+}
+
 export default function LiveStreamPage({
   liveId,
   isHost,
   onBack,
+  liveMode = "video",
 }: LiveStreamPageProps) {
   const { actor } = useActor();
   const { data: myProfile } = useCallerProfile();
@@ -66,6 +85,47 @@ export default function LiveStreamPage({
   const [ending, setEnding] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const reactionCounter = useRef(0);
+
+  // Viewer join request state
+  const [joinRequestStatus, setJoinRequestStatus] =
+    useState<JoinRequestStatus>("idle");
+  const [_joinRequestMode, setJoinRequestMode] = useState<"audio" | "video">(
+    "audio",
+  );
+
+  // Host: pending join requests (simulated)
+  const [pendingRequests, setPendingRequests] = useState<PendingJoinRequest[]>(
+    [],
+  );
+  const [showCoHostBanner, setShowCoHostBanner] = useState(false);
+
+  // Simulate incoming join requests on host side (demo)
+  useEffect(() => {
+    if (!isHost) return;
+    const timer = setTimeout(() => {
+      setPendingRequests([{ id: "req1", userName: "Priya", mode: "audio" }]);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [isHost]);
+
+  const handleViewerJoinRequest = (mode: "audio" | "video") => {
+    setJoinRequestMode(mode);
+    setJoinRequestStatus("pending");
+    // Simulate auto-decline after 30s if no response
+    setTimeout(() => {
+      setJoinRequestStatus((prev) => (prev === "pending" ? "declined" : prev));
+    }, 30000);
+  };
+
+  const handleHostAcceptRequest = (reqId: string) => {
+    setPendingRequests((prev) => prev.filter((r) => r.id !== reqId));
+    setShowCoHostBanner(true);
+    setTimeout(() => setShowCoHostBanner(false), 4000);
+  };
+
+  const handleHostDeclineRequest = (reqId: string) => {
+    setPendingRequests((prev) => prev.filter((r) => r.id !== reqId));
+  };
 
   const fetchData = useCallback(async () => {
     if (!actor) return;
@@ -113,7 +173,6 @@ export default function LiveStreamPage({
     };
   }, [actor, liveId, fetchData]);
 
-  // Scroll to bottom on new messages
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message update
   useEffect(() => {
     msgEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -190,7 +249,6 @@ export default function LiveStreamPage({
     } catch {}
   };
 
-  // Group reactions by emoji for display
   const reactionCounts = reactions.reduce<Record<string, number>>((acc, r) => {
     acc[r.emoji] = (acc[r.emoji] || 0) + 1;
     return acc;
@@ -199,15 +257,38 @@ export default function LiveStreamPage({
   const hostPhoto = liveInfo?.hostPhoto;
   const hostName = liveInfo?.hostName ?? "Host";
   const title = liveInfo?.title ?? "Live Stream";
+  const isAudio = liveMode === "audio";
 
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col overflow-hidden"
       style={{ background: "#050008" }}
     >
-      {/* Host image with filter */}
+      {/* Background: Audio mode shows mic animation; video mode shows host photo */}
       <div className="absolute inset-0">
-        {hostPhoto ? (
+        {isAudio ? (
+          <div
+            className="w-full h-full flex items-center justify-center"
+            style={{
+              background: "linear-gradient(135deg,#0a0020,#1a0040,#0d001a)",
+            }}
+          >
+            {/* Audio wave animation */}
+            <div className="flex items-end gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <div
+                  key={i}
+                  className="w-2 rounded-full"
+                  style={{
+                    background: "linear-gradient(to top,#e11d48,#7c3aed)",
+                    animation: `audioWave 0.8s ease-in-out ${i * 0.1}s infinite alternate`,
+                    minHeight: 8,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : hostPhoto ? (
           <img
             src={hostPhoto}
             alt={hostName}
@@ -232,51 +313,72 @@ export default function LiveStreamPage({
           }}
         />
         {/* Pulse rings around host avatar */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="relative">
-            <div
-              className="w-32 h-32 rounded-full animate-ping opacity-20"
-              style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
-            />
-            <div
-              className="absolute inset-3 w-26 h-26 rounded-full animate-ping opacity-15"
-              style={{
-                background: "linear-gradient(135deg,#e11d48,#7c3aed)",
-                animationDelay: "0.5s",
-              }}
-            />
-            <div className="absolute inset-8 flex items-center justify-center">
-              <Avatar className="w-16 h-16 border-2 border-white/40">
-                <AvatarImage src={hostPhoto} />
-                <AvatarFallback
-                  className="text-2xl"
-                  style={{
-                    background: "linear-gradient(135deg,#e11d48,#7c3aed)",
-                  }}
-                >
-                  {hostName.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
+        {!isAudio && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="relative">
+              <div
+                className="w-32 h-32 rounded-full animate-ping opacity-20"
+                style={{
+                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                }}
+              />
+              <div
+                className="absolute inset-3 w-26 h-26 rounded-full animate-ping opacity-15"
+                style={{
+                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                  animationDelay: "0.5s",
+                }}
+              />
+              <div className="absolute inset-8 flex items-center justify-center">
+                <Avatar className="w-16 h-16 border-2 border-white/40">
+                  <AvatarImage src={hostPhoto} />
+                  <AvatarFallback
+                    className="text-2xl"
+                    style={{
+                      background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                    }}
+                  >
+                    {hostName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+        {isAudio && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <Avatar className="w-24 h-24 border-4 border-pink-500/60 mb-4">
+              <AvatarImage src={hostPhoto} />
+              <AvatarFallback
+                className="text-3xl"
+                style={{
+                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                }}
+              >
+                {hostName.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <p className="text-white font-bold text-lg">{hostName}</p>
+            <p className="text-white/60 text-sm mt-1">🎙️ Audio Stream</p>
+          </div>
+        )}
       </div>
 
       {/* Top bar */}
       <div className="relative z-10 flex items-center gap-2 px-4 pt-safe pt-4 pb-2">
-        {/* LIVE badge */}
         <div
           className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-          style={{ background: "#e11d48" }}
+          style={{ background: isAudio ? "#7c3aed" : "#e11d48" }}
         >
           <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-          <span className="text-white text-xs font-bold">LIVE</span>
+          <span className="text-white text-xs font-bold">
+            {isAudio ? "AUDIO" : "LIVE"}
+          </span>
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-white font-bold text-sm truncate">{title}</p>
           <p className="text-white/60 text-xs">{hostName}</p>
         </div>
-        {/* Viewer count */}
         <button
           type="button"
           data-ocid="live_stream.viewers_button"
@@ -289,7 +391,6 @@ export default function LiveStreamPage({
             {viewers.length}
           </span>
         </button>
-        {/* Host controls */}
         {isHost && (
           <>
             <button
@@ -318,7 +419,6 @@ export default function LiveStreamPage({
             </button>
           </>
         )}
-        {/* End / Leave */}
         {isHost ? (
           <button
             type="button"
@@ -343,8 +443,8 @@ export default function LiveStreamPage({
         )}
       </div>
 
-      {/* CSS filter selector (host only) */}
-      {isHost && (
+      {/* CSS filter selector (host only, video mode) */}
+      {isHost && !isAudio && (
         <div
           className="relative z-10 flex items-center gap-2 px-4 py-1 overflow-x-auto"
           style={{ scrollbarWidth: "none" }}
@@ -367,6 +467,55 @@ export default function LiveStreamPage({
               {f.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Host: pending join requests */}
+      {isHost && pendingRequests.length > 0 && (
+        <div className="relative z-10 px-3 py-2 space-y-2">
+          {pendingRequests.map((req) => (
+            <div
+              key={req.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-2xl"
+              style={{
+                background: "rgba(0,0,0,0.7)",
+                backdropFilter: "blur(12px)",
+              }}
+            >
+              <span className="text-white/90 text-sm flex-1">
+                <span className="font-bold">{req.userName}</span> wants to join{" "}
+                {req.mode === "audio" ? "🎙️ audio" : "📹 video"}
+              </span>
+              <button
+                type="button"
+                data-ocid="live_stream.confirm_button"
+                onClick={() => handleHostAcceptRequest(req.id)}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: "#22c55e" }}
+              >
+                <Check className="w-4 h-4 text-white" />
+              </button>
+              <button
+                type="button"
+                data-ocid="live_stream.cancel_button"
+                onClick={() => handleHostDeclineRequest(req.id)}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: "#e11d48" }}
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Co-host accepted banner */}
+      {showCoHostBanner && (
+        <div
+          className="relative z-10 mx-3 px-4 py-2 rounded-2xl text-center text-sm font-semibold text-white"
+          style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)" }}
+        >
+          🎉 Co-host added to stream!
         </div>
       )}
 
@@ -402,7 +551,7 @@ export default function LiveStreamPage({
         </div>
       )}
 
-      {/* Bottom area: chat + reactions */}
+      {/* Bottom area */}
       <div className="relative z-10 mt-auto px-3 pb-5 flex flex-col gap-2">
         {/* Chat messages */}
         <div
@@ -432,6 +581,67 @@ export default function LiveStreamPage({
           ))}
           <div ref={msgEndRef} />
         </div>
+
+        {/* Viewer Join Request status */}
+        {!isHost && (
+          <div className="flex flex-col gap-1.5">
+            {joinRequestStatus === "idle" && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  data-ocid="live_stream.secondary_button"
+                  onClick={() => handleViewerJoinRequest("audio")}
+                  className="flex-1 h-9 rounded-full text-xs font-bold text-white flex items-center justify-center gap-1.5"
+                  style={{
+                    background: "rgba(124,58,237,0.5)",
+                    border: "1px solid rgba(124,58,237,0.7)",
+                  }}
+                >
+                  🎙️ Join Audio
+                </button>
+                <button
+                  type="button"
+                  data-ocid="live_stream.secondary_button"
+                  onClick={() => handleViewerJoinRequest("video")}
+                  className="flex-1 h-9 rounded-full text-xs font-bold text-white flex items-center justify-center gap-1.5"
+                  style={{
+                    background: "rgba(225,29,72,0.5)",
+                    border: "1px solid rgba(225,29,72,0.7)",
+                  }}
+                >
+                  📹 Join Video
+                </button>
+              </div>
+            )}
+            {joinRequestStatus === "pending" && (
+              <div
+                className="flex items-center justify-center gap-2 py-2 rounded-full text-sm text-white/80"
+                style={{ background: "rgba(0,0,0,0.5)" }}
+              >
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Waiting for host...
+              </div>
+            )}
+            {joinRequestStatus === "accepted" && (
+              <div
+                className="flex items-center justify-center gap-2 py-2 rounded-full text-sm font-bold text-white"
+                style={{
+                  background: "linear-gradient(135deg,#22c55e,#16a34a)",
+                }}
+              >
+                ✓ Host accepted! You&apos;re co-hosting
+              </div>
+            )}
+            {joinRequestStatus === "declined" && (
+              <div
+                className="flex items-center justify-center gap-2 py-2 rounded-full text-sm text-red-400"
+                style={{ background: "rgba(0,0,0,0.5)" }}
+              >
+                Request declined
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Emoji reactions row */}
         <div
@@ -591,6 +801,10 @@ export default function LiveStreamPage({
         @keyframes floatUp {
           0% { transform: translateY(0) scale(1); opacity: 1; }
           100% { transform: translateY(-200px) scale(1.5); opacity: 0; }
+        }
+        @keyframes audioWave {
+          0% { height: 8px; }
+          100% { height: 48px; }
         }
       `}</style>
     </div>

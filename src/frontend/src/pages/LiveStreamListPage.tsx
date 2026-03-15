@@ -16,7 +16,11 @@ import { useActor } from "../hooks/useActor";
 
 interface LiveStreamListPageProps {
   onBack: () => void;
-  onJoinLive: (liveId: bigint, isHost: boolean) => void;
+  onJoinLive: (
+    liveId: bigint,
+    isHost: boolean,
+    liveMode?: "video" | "audio",
+  ) => void;
 }
 
 function timeAgo(ts: bigint) {
@@ -33,7 +37,9 @@ export default function LiveStreamListPage({
 }: LiveStreamListPageProps) {
   const { actor } = useActor();
   const [lives, setLives] = useState<LiveStream[]>([]);
+  const [showModePicker, setShowModePicker] = useState(false);
   const [showStart, setShowStart] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<"video" | "audio">("video");
   const [title, setTitle] = useState("");
   const [matchesOnly, setMatchesOnly] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -58,10 +64,17 @@ export default function LiveStreamListPage({
     try {
       const liveId = await actor.startLive(title.trim(), matchesOnly);
       setShowStart(false);
-      onJoinLive(liveId, true);
+      setShowModePicker(false);
+      onJoinLive(liveId, true, selectedMode);
     } catch {
       setStarting(false);
     }
+  };
+
+  const handleModeSelect = (mode: "video" | "audio") => {
+    setSelectedMode(mode);
+    setShowModePicker(false);
+    setShowStart(true);
   };
 
   return (
@@ -76,7 +89,7 @@ export default function LiveStreamListPage({
       >
         <button
           type="button"
-          data-ocid="live_list.back_button"
+          data-ocid="live_list.button"
           onClick={onBack}
           className="w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:text-white transition-colors"
           style={{ background: "oklch(0.15 0.05 300)" }}
@@ -89,7 +102,7 @@ export default function LiveStreamListPage({
         </div>
         <Button
           data-ocid="live_list.primary_button"
-          onClick={() => setShowStart(true)}
+          onClick={() => setShowModePicker(true)}
           className="ml-auto text-sm font-semibold h-9 px-4 rounded-full"
           style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
         >
@@ -119,7 +132,7 @@ export default function LiveStreamListPage({
                 key={live.id.toString()}
                 type="button"
                 data-ocid={`live_list.item.${idx + 1}`}
-                onClick={() => onJoinLive(live.id, false)}
+                onClick={() => onJoinLive(live.id, false, "video")}
                 className="relative rounded-2xl overflow-hidden text-left transition-transform active:scale-95"
                 style={{
                   background: "oklch(0.14 0.06 300)",
@@ -127,7 +140,6 @@ export default function LiveStreamListPage({
                   minHeight: 180,
                 }}
               >
-                {/* Host photo background */}
                 {live.hostPhoto ? (
                   <img
                     src={live.hostPhoto}
@@ -149,8 +161,6 @@ export default function LiveStreamListPage({
                       "linear-gradient(to top, rgba(0,0,0,0.85) 40%, transparent)",
                   }}
                 />
-
-                {/* LIVE badge */}
                 <div
                   className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full"
                   style={{ background: "#e11d48" }}
@@ -158,7 +168,6 @@ export default function LiveStreamListPage({
                   <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                   <span className="text-white text-[10px] font-bold">LIVE</span>
                 </div>
-
                 {live.matchesOnly && (
                   <div
                     className="absolute top-2.5 right-2.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-amber-300"
@@ -167,8 +176,6 @@ export default function LiveStreamListPage({
                     Matches
                   </div>
                 )}
-
-                {/* Bottom info */}
                 <div className="absolute bottom-0 left-0 right-0 p-3">
                   <p className="text-white font-semibold text-sm leading-tight truncate">
                     {live.title}
@@ -188,8 +195,6 @@ export default function LiveStreamListPage({
                     </span>
                   </div>
                 </div>
-
-                {/* Play overlay */}
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center"
@@ -204,8 +209,8 @@ export default function LiveStreamListPage({
         )}
       </div>
 
-      {/* Start Live Sheet */}
-      <Sheet open={showStart} onOpenChange={setShowStart}>
+      {/* Mode Picker Sheet */}
+      <Sheet open={showModePicker} onOpenChange={setShowModePicker}>
         <SheetContent
           side="bottom"
           data-ocid="live_list.sheet"
@@ -216,9 +221,90 @@ export default function LiveStreamListPage({
           }}
         >
           <SheetHeader className="mb-6">
+            <SheetTitle className="text-white text-lg font-bold">
+              Start a Live Session
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-3">
+            <button
+              type="button"
+              data-ocid="live_list.primary_button"
+              onClick={() => handleModeSelect("video")}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl text-left transition-all active:scale-[0.98]"
+              style={{
+                background: "oklch(0.16 0.07 300)",
+                border: "1px solid oklch(0.28 0.1 300)",
+              }}
+            >
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
+                style={{
+                  background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                }}
+              >
+                🎥
+              </div>
+              <div>
+                <p className="text-white font-bold">Live Video</p>
+                <p className="text-white/50 text-sm">
+                  Start a video live stream — camera on
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              data-ocid="live_list.secondary_button"
+              onClick={() => handleModeSelect("audio")}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl text-left transition-all active:scale-[0.98]"
+              style={{
+                background: "oklch(0.16 0.07 300)",
+                border: "1px solid oklch(0.28 0.1 300)",
+              }}
+            >
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
+                style={{
+                  background: "linear-gradient(135deg,#7c3aed,#2563eb)",
+                }}
+              >
+                🎙️
+              </div>
+              <div>
+                <p className="text-white font-bold">Live Audio</p>
+                <p className="text-white/50 text-sm">
+                  Audio-only stream — no camera needed
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              data-ocid="live_list.cancel_button"
+              onClick={() => setShowModePicker(false)}
+              className="w-full py-3 rounded-2xl text-white/50 text-sm text-center"
+            >
+              Browse Streams Instead
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Start Live Sheet */}
+      <Sheet open={showStart} onOpenChange={setShowStart}>
+        <SheetContent
+          side="bottom"
+          data-ocid="live_list.modal"
+          className="rounded-t-3xl border-0 px-6 pb-10"
+          style={{
+            background: "oklch(0.11 0.05 300)",
+            borderTop: "1px solid oklch(0.22 0.07 300)",
+          }}
+        >
+          <SheetHeader className="mb-6">
             <SheetTitle className="text-white text-lg font-bold flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              Start a Live Stream
+              {selectedMode === "audio"
+                ? "Start Audio Stream 🎙️"
+                : "Start Video Stream 🎥"}
             </SheetTitle>
           </SheetHeader>
           <div className="space-y-4">
@@ -257,7 +343,11 @@ export default function LiveStreamListPage({
               className="w-full h-12 rounded-xl font-bold text-base"
               style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
             >
-              {starting ? "Starting..." : "Start Live 🔴"}
+              {starting
+                ? "Starting..."
+                : selectedMode === "audio"
+                  ? "Start Audio Live 🎙️"
+                  : "Start Video Live 🔴"}
             </Button>
           </div>
         </SheetContent>

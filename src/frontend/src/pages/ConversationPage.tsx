@@ -1,5 +1,11 @@
 import { Input } from "@/components/ui/input";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   ArrowLeft,
   Check,
   Edit2,
@@ -25,8 +31,23 @@ import {
   useTypingStatus,
 } from "../hooks/useQueries";
 
-// Extended message type with fields added in backend version 9
 type ExtMessage = MessageWithMeta;
+
+interface GiftMessage {
+  id: string;
+  gift: string;
+  giftEmoji: string;
+  text: string;
+  timestamp: number;
+  isMine: true;
+}
+
+const GIFTS = [
+  { name: "Rose", emoji: "🌹", points: 10 },
+  { name: "Diamond", emoji: "💎", points: 50 },
+  { name: "Chocolate", emoji: "🍫", points: 20 },
+  { name: "Love Letter", emoji: "💌", points: 5 },
+];
 
 interface Props {
   profile: Profile;
@@ -80,27 +101,26 @@ export default function ConversationPage({
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markedReadRef = useRef<Set<string>>(new Set());
 
-  // Chat enhancement state (optimistic)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
-  // Local optimistic reactions — local takes precedence over backend
   const [localReactions, setLocalReactions] = useState<Map<string, string>>(
     new Map(),
   );
-  // Local optimistic deleted ids
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
-  // Local optimistic edits
   const [localEdits, setLocalEdits] = useState<Map<string, string>>(new Map());
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Gift state
+  const [showGiftPicker, setShowGiftPicker] = useState(false);
+  const [giftMessages, setGiftMessages] = useState<GiftMessage[]>([]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: ref scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, giftMessages]);
 
-  // Mark incoming messages as read
   useEffect(() => {
     for (const msg of messages) {
       const key = msg.id.toString();
@@ -115,7 +135,6 @@ export default function ConversationPage({
     }
   }, [messages, myPrincipal, markRead]);
 
-  // Dismiss context menu on outside click
   useEffect(() => {
     if (!contextMenu) return;
     const handler = () => setContextMenu(null);
@@ -140,9 +159,7 @@ export default function ConversationPage({
     if (!rawText) return;
 
     if (editingMsgId) {
-      // Optimistic local edit
       setLocalEdits((prev) => new Map(prev).set(editingMsgId, rawText));
-      // Persist to backend
       const idBigint = messages.find(
         (m) => m.id.toString() === editingMsgId,
       )?.id;
@@ -170,6 +187,23 @@ export default function ConversationPage({
     try {
       await sendMessage.mutateAsync({ toUserId: profile.userId, text });
     } catch {}
+  };
+
+  const handleSendGift = (gift: {
+    name: string;
+    emoji: string;
+    points: number;
+  }) => {
+    const giftMsg: GiftMessage = {
+      id: `gift_${Date.now()}`,
+      gift: gift.name,
+      giftEmoji: gift.emoji,
+      text: `sent you a ${gift.emoji} ${gift.name}!`,
+      timestamp: Date.now(),
+      isMine: true,
+    };
+    setGiftMessages((prev) => [...prev, giftMsg]);
+    setShowGiftPicker(false);
   };
 
   const openContextMenu = (
@@ -218,9 +252,7 @@ export default function ConversationPage({
 
   const handleReact = (emoji: string) => {
     if (!contextMenu) return;
-    // Optimistic update
     setLocalReactions((prev) => new Map(prev).set(contextMenu.msgId, emoji));
-    // Persist to backend
     reactToMessage.mutate({ messageId: contextMenu.msgIdBigint, emoji });
     setContextMenu(null);
   };
@@ -246,9 +278,7 @@ export default function ConversationPage({
 
   const handleDelete = () => {
     if (!contextMenu) return;
-    // Optimistic update
     setDeletedIds((prev) => new Set(prev).add(contextMenu.msgId));
-    // Persist to backend
     deleteMessage.mutate(contextMenu.msgIdBigint);
     setContextMenu(null);
   };
@@ -352,7 +382,7 @@ export default function ConversationPage({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {visibleMessages.length === 0 && (
+        {visibleMessages.length === 0 && giftMessages.length === 0 && (
           <div
             className="text-center py-12"
             data-ocid="conversation.empty_state"
@@ -367,7 +397,6 @@ export default function ConversationPage({
           const isMine = msg.fromUserId.toString() === myPrincipal;
           const msgId = msg.id.toString();
           const displayText = localEdits.get(msgId) ?? msg.text;
-          // Local optimistic reaction takes precedence, then backend reaction
           const reaction = localReactions.get(msgId) ?? msg.reaction;
           const time = new Date(
             Number(msg.timestamp) / 1_000_000,
@@ -428,7 +457,6 @@ export default function ConversationPage({
                     </span>
                   )}
                 </div>
-                {/* Reaction pill */}
                 {reaction && (
                   <div
                     className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-sm ${isMine ? "float-right" : "float-left"}`}
@@ -464,6 +492,31 @@ export default function ConversationPage({
             </div>
           );
         })}
+
+        {/* Gift messages */}
+        {giftMessages.map((gm) => (
+          <div key={gm.id} className="flex justify-end">
+            <div
+              className="max-w-[65%] px-5 py-4 rounded-3xl flex flex-col items-center gap-1.5"
+              style={{
+                background: "linear-gradient(135deg,#e11d48,#7c3aed)",
+                boxShadow: "0 4px 20px rgba(225,29,72,0.4)",
+              }}
+            >
+              <span className="text-3xl">{gm.giftEmoji}</span>
+              <p className="text-white text-sm font-semibold text-center italic">
+                {gm.text}
+              </p>
+              <p className="text-white/60 text-[10px]">
+                {new Date(gm.timestamp).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+          </div>
+        ))}
+
         {isTyping && (
           <div className="flex justify-start">
             <div
@@ -502,7 +555,6 @@ export default function ConversationPage({
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          {/* Reaction row */}
           <div
             className="flex gap-1 px-3 py-3 border-b"
             style={{ borderColor: "oklch(0.25 0.07 330 / 0.4)" }}
@@ -518,7 +570,6 @@ export default function ConversationPage({
               </button>
             ))}
           </div>
-          {/* Actions */}
           <button
             type="button"
             onClick={handleReply}
@@ -558,7 +609,6 @@ export default function ConversationPage({
           background: "oklch(0.1 0.04 320)",
         }}
       >
-        {/* Reply preview */}
         {replyTo && (
           <div
             className="flex items-center gap-2 px-4 py-2"
@@ -587,7 +637,6 @@ export default function ConversationPage({
             </button>
           </div>
         )}
-        {/* Edit indicator */}
         {editingMsgId && (
           <div
             className="flex items-center gap-2 px-4 py-1.5"
@@ -612,7 +661,7 @@ export default function ConversationPage({
             </button>
           </div>
         )}
-        <div className="px-4 py-3 flex items-center gap-3">
+        <div className="px-4 py-3 flex items-center gap-2">
           <Input
             value={inputValue}
             onChange={(e) => handleTyping(e.target.value)}
@@ -637,7 +686,18 @@ export default function ConversationPage({
               color: "white",
             }}
           />
-          {/* Emoji picker trigger placeholder */}
+          {/* Gift button */}
+          <button
+            type="button"
+            data-ocid="conversation.secondary_button"
+            onClick={() => setShowGiftPicker(true)}
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-lg"
+            style={{ background: "oklch(0.18 0.05 320)" }}
+            title="Send a gift"
+          >
+            🎁
+          </button>
+          {/* Emoji button */}
           <button
             type="button"
             className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
@@ -660,6 +720,44 @@ export default function ConversationPage({
           </button>
         </div>
       </div>
+
+      {/* Gift Picker Sheet */}
+      <Sheet open={showGiftPicker} onOpenChange={setShowGiftPicker}>
+        <SheetContent
+          side="bottom"
+          data-ocid="conversation.sheet"
+          className="rounded-t-3xl border-0 px-6 pb-10"
+          style={{
+            background: "oklch(0.11 0.05 300)",
+            borderTop: "1px solid oklch(0.22 0.07 300)",
+          }}
+        >
+          <SheetHeader className="mb-4">
+            <SheetTitle className="text-white font-bold">
+              🎁 Send a Gift
+            </SheetTitle>
+          </SheetHeader>
+          <div className="grid grid-cols-2 gap-3">
+            {GIFTS.map((gift) => (
+              <button
+                key={gift.name}
+                type="button"
+                data-ocid="conversation.secondary_button"
+                onClick={() => handleSendGift(gift)}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl transition-all active:scale-95"
+                style={{
+                  background: "oklch(0.16 0.06 300)",
+                  border: "1px solid oklch(0.28 0.08 300)",
+                }}
+              >
+                <span className="text-4xl">{gift.emoji}</span>
+                <p className="text-white font-semibold text-sm">{gift.name}</p>
+                <p className="text-white/50 text-xs">{gift.points} pts</p>
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

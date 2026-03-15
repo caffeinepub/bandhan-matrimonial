@@ -25,6 +25,21 @@ import {
   useUnsuperLikeUser,
 } from "../hooks/useQueries";
 
+const ZODIACS = [
+  "♈",
+  "♉",
+  "♊",
+  "♋",
+  "♌",
+  "♍",
+  "♎",
+  "♏",
+  "♐",
+  "♑",
+  "♒",
+  "♓",
+];
+
 interface Props {
   profile: Profile;
   onBack: () => void;
@@ -33,12 +48,16 @@ interface Props {
   onVideoCall: () => void;
 }
 
+interface IcebreakerEntry {
+  q: string;
+  a: string;
+}
+
 // --- Compatibility Score Component ---
 function CompatibilityScore({
   myProfile,
   theirProfile,
 }: { myProfile: Profile; theirProfile: Profile }) {
-  // Score: shared interests (40%), same religion (20%), same city (20%), age within 5 years (20%)
   const sharedInterests = theirProfile.interests.filter((i) =>
     myProfile.interests.includes(i),
   ).length;
@@ -67,7 +86,6 @@ function CompatibilityScore({
     interestScore + religionScore + cityScore + ageScore,
   );
 
-  // Animate ring on mount
   const [animatedScore, setAnimatedScore] = useState(0);
   const frameRef = useRef<number | null>(null);
   useEffect(() => {
@@ -88,7 +106,6 @@ function CompatibilityScore({
 
   const circumference = 2 * Math.PI * 36;
   const dashOffset = circumference * (1 - animatedScore / 100);
-
   const label =
     score >= 80
       ? "Excellent Match"
@@ -182,7 +199,6 @@ function ScorePill({ label }: { label: string }) {
   );
 }
 
-// --- Share Button ---
 function ShareButton({ profile }: { profile: Profile }) {
   const [copied, setCopied] = useState(false);
   const handleShare = async () => {
@@ -248,23 +264,49 @@ export default function ViewProfilePage({
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [storyViewerIndex, setStoryViewerIndex] = useState(0);
 
-  // Sync hasSuperLiked from backend
+  // New feature states from localStorage
+  const [theirMood, setTheirMood] = useState("");
+  const [theirGoal, setTheirGoal] = useState("");
+  const [theirIcebreakers, setTheirIcebreakers] = useState<IcebreakerEntry[]>(
+    [],
+  );
+
+  useEffect(() => {
+    const uid = profile.userId.toString();
+    setTheirMood(localStorage.getItem(`bandhan_mood_${uid}`) || "");
+    setTheirGoal(localStorage.getItem(`bandhan_goal_${uid}`) || "");
+    try {
+      const ib = localStorage.getItem(`bandhan_icebreakers_${uid}`);
+      if (ib) setTheirIcebreakers(JSON.parse(ib));
+      else setTheirIcebreakers([]);
+    } catch {
+      setTheirIcebreakers([]);
+    }
+  }, [profile.userId]);
+
+  // Zodiac from age
+  const zodiac = ZODIACS[Number(profile.age) % 12];
+  const showBirthdayFlag =
+    Number(profile.age) >= 22 && Number(profile.age) <= 28;
+
+  // Fallback: derive mood from interests count if not set
+  const derivedMood =
+    profile.interests.length > 5 ? "💍 Ready for marriage" : "🌟 Exploring";
+  const displayMood = theirMood || derivedMood;
+
   useEffect(() => {
     setSuperLiked(hasSuperLikedData);
   }, [hasSuperLikedData]);
 
-  // Record profile view silently on mount
   // biome-ignore lint/correctness/useExhaustiveDependencies: fire-once on mount
   useEffect(() => {
     recordProfileView.mutate(profile.userId);
   }, [profile.userId]);
 
-  // Mutual interests
   const mutualInterests = myProfile
     ? profile.interests.filter((i) => myProfile.interests.includes(i))
     : [];
 
-  // Story highlights for this profile
   const profileHighlights = allStories.filter((s) => {
     if (s.userId.toString() !== profile.userId.toString()) return false;
     try {
@@ -343,7 +385,6 @@ export default function ViewProfilePage({
             background: "linear-gradient(to top, #0a0010 30%, transparent 70%)",
           }}
         />
-        {/* Media dots */}
         {allMedia.length > 1 && (
           <div className="absolute top-4 left-0 right-0 flex justify-center gap-1">
             {allMedia.map((mediaUrl, i) => (
@@ -375,21 +416,50 @@ export default function ViewProfilePage({
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
         <div className="absolute bottom-4 left-5 right-5 pointer-events-none">
-          <h1 className="text-3xl font-bold text-white">
-            {profile.name}, {Number(profile.age)}
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-3xl font-bold text-white">
+              {profile.name}, {Number(profile.age)}
+            </h1>
+            <span className="text-2xl" title="Zodiac sign">
+              {zodiac}
+            </span>
+          </div>
           <p className="text-white/70 text-sm mt-0.5">📍 {profile.location}</p>
           {profile.occupation && (
             <p className="text-white/60 text-xs mt-0.5">
               💼 {profile.occupation}
             </p>
           )}
+          {showBirthdayFlag && (
+            <span
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs text-white font-semibold mt-1.5 mr-1.5"
+              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)" }}
+            >
+              🎂 Birthday coming up!
+            </span>
+          )}
+          {theirGoal && (
+            <span
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs text-white font-semibold mt-1.5 mr-1.5"
+              style={{ background: "linear-gradient(135deg,#7c3aed,#2563eb)" }}
+            >
+              💍 {theirGoal}
+            </span>
+          )}
+          <span
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs text-white mt-1.5"
+            style={{
+              background: "oklch(0.65 0.22 10 / 0.5)",
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            {displayMood}
+          </span>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        {/* Compatibility Score */}
         {myProfile &&
           myProfile.userId.toString() !== profile.userId.toString() && (
             <CompatibilityScore myProfile={myProfile} theirProfile={profile} />
@@ -426,7 +496,33 @@ export default function ViewProfilePage({
           <Section title="More About Me">{profile.aboutMe}</Section>
         )}
         {profile.thoughts && (
-          <Section title="Life Philosophy">"{profile.thoughts}"</Section>
+          <Section title="Life Philosophy">
+            &ldquo;{profile.thoughts}&rdquo;
+          </Section>
+        )}
+
+        {/* Icebreakers from local storage */}
+        {theirIcebreakers.some((ib) => ib.q && ib.a) && (
+          <div>
+            <SectionTitle>🧠 Icebreakers</SectionTitle>
+            <div className="space-y-2 mt-2">
+              {theirIcebreakers
+                .filter((ib) => ib.q && ib.a)
+                .map((ib, i) => (
+                  <div
+                    key={ib.q || String(i)}
+                    className="rounded-2xl p-4"
+                    style={{
+                      background: "oklch(0.14 0.05 300)",
+                      border: "1px solid oklch(0.22 0.07 300)",
+                    }}
+                  >
+                    <p className="text-white/50 text-xs mb-1">{ib.q}</p>
+                    <p className="text-white text-sm font-medium">{ib.a}</p>
+                  </div>
+                ))}
+            </div>
+          </div>
         )}
 
         {/* Mutual Interests Badge */}
@@ -558,7 +654,7 @@ export default function ViewProfilePage({
           </div>
         )}
 
-        {/* Media gallery - clickable */}
+        {/* Media gallery */}
         {profile.mediaUrls.length > 0 && (
           <div>
             <SectionTitle>Gallery</SectionTitle>
@@ -668,7 +764,6 @@ export default function ViewProfilePage({
         </button>
       </div>
 
-      {/* Gallery Lightbox */}
       {lightboxOpen && allMedia.length > 0 && (
         <GalleryLightbox
           images={allMedia}
@@ -676,8 +771,6 @@ export default function ViewProfilePage({
           onClose={() => setLightboxOpen(false)}
         />
       )}
-
-      {/* Story Viewer Modal for Highlights */}
       {storyViewerOpen && allStories.length > 0 && (
         <StoryViewerModal
           stories={allStories}

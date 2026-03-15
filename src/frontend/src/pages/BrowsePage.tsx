@@ -19,6 +19,7 @@ import { Heart, Search, SlidersHorizontal, Star, X } from "lucide-react";
 import { useState } from "react";
 import type { Profile } from "../backend";
 import NotificationBell from "../components/NotificationBell";
+import StoriesRow from "../components/StoriesRow";
 import {
   useAllProfiles,
   useCallerProfile,
@@ -152,6 +153,7 @@ export default function BrowsePage({
   const [filterOpen, setFilterOpen] = useState(false);
   const [pendingFilters, setPendingFilters] = useState<Filters>(defaultFilters);
 
+  const [showSearch, setShowSearch] = useState(false);
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [detectedCity, setDetectedCity] = useState<string | null>(null);
@@ -300,74 +302,101 @@ export default function BrowsePage({
         }
       `}</style>
 
-      {/* Header row: Discover + Bell + Ring icon */}
+      {/* Header row: Discover + Ring + LIVE + Search + Heart */}
       <div className="px-5 pt-12 pb-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold discover-text">Discover</h1>
-          <p className="text-white/50 text-xs mt-0.5">
-            {filtered.length} people nearby
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold discover-text">Discover</h1>
         <div className="flex items-center gap-2">
+          {/* Ring icon */}
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+          >
+            <span className="text-white text-base">💍</span>
+          </div>
+          {/* LIVE button */}
           {onGoLive && (
             <button
               type="button"
               data-ocid="browse.primary_button"
               onClick={onGoLive}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold text-white"
-              style={{ background: "#e11d48" }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-white"
+              style={{
+                background: "#e11d48",
+                boxShadow: "0 0 10px rgba(225,29,72,0.5)",
+              }}
             >
               <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
               LIVE
             </button>
           )}
-          <NotificationBell onViewAll={onNotifications} />
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg,#e11d48,#7c3aed)" }}
+          {/* Search toggle icon */}
+          <button
+            type="button"
+            data-ocid="browse.toggle"
+            onClick={() => setShowSearch((v) => !v)}
+            className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90"
+            style={{
+              background: showSearch
+                ? "linear-gradient(135deg,#e11d48,#7c3aed)"
+                : "oklch(0.15 0.05 300)",
+              border: showSearch ? "none" : "1px solid oklch(0.28 0.07 300)",
+              boxShadow: showSearch
+                ? "0 0 12px rgba(225,29,72,0.4)"
+                : undefined,
+            }}
           >
-            <span className="text-white text-lg">💍</span>
-          </div>
+            <Search className="w-4 h-4 text-white" />
+          </button>
+          {/* Heart notification */}
+          <NotificationBell onViewAll={onNotifications} useHeartIcon />
         </div>
       </div>
 
-      {/* Search + Filter row */}
-      <div className="px-5 mb-4 flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name, location..."
-            data-ocid="browse.search_input"
-            className="pl-10 h-10 rounded-2xl text-sm"
-            style={{
-              background: "oklch(0.15 0.05 300)",
-              border: "1px solid oklch(0.25 0.06 300)",
-              color: "white",
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={openFilter}
-          data-ocid="browse.toggle"
-          className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 relative transition-all active:scale-95"
-          style={{
-            background: hasActiveFilters
-              ? "linear-gradient(135deg,#e11d48,#7c3aed)"
-              : "oklch(0.15 0.05 300)",
-            border: `1px solid ${hasActiveFilters ? "transparent" : "oklch(0.25 0.06 300)"}`,
-          }}
-        >
-          <SlidersHorizontal className="w-4 h-4 text-white" />
-          {hasActiveFilters && (
-            <span
-              className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
-              style={{ background: "#e11d48" }}
+      {/* Collapsible search + filter row */}
+      {showSearch && (
+        <div className="px-5 mb-4 flex items-center gap-2 animate-in slide-in-from-top-2 duration-200">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by name, location..."
+              data-ocid="browse.search_input"
+              autoFocus
+              className="pl-10 h-10 rounded-2xl text-sm"
+              style={{
+                background: "oklch(0.15 0.05 300)",
+                border: "1px solid oklch(0.25 0.06 300)",
+                color: "white",
+              }}
             />
-          )}
-        </button>
+          </div>
+          <button
+            type="button"
+            onClick={openFilter}
+            data-ocid="browse.toggle"
+            className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 relative transition-all active:scale-95"
+            style={{
+              background: hasActiveFilters
+                ? "linear-gradient(135deg,#e11d48,#7c3aed)"
+                : "oklch(0.15 0.05 300)",
+              border: `1px solid ${hasActiveFilters ? "transparent" : "oklch(0.25 0.06 300)"}`,
+            }}
+          >
+            <SlidersHorizontal className="w-4 h-4 text-white" />
+            {hasActiveFilters && (
+              <span
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
+                style={{ background: "#e11d48" }}
+              />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Stories Row */}
+      <div className="mb-4">
+        <StoriesRow myUserId={myId} />
       </div>
 
       {/* Filter Sheet */}
