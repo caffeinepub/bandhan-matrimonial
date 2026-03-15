@@ -1,28 +1,22 @@
 # Bandhan Matrimonial
 
 ## Current State
-Version 37 is live with all features from versions 1-37 intact: swipe discovery, profile creation, match requests, stories, advanced chat (reply, edit, react, delete, Messenger-style, read/seen, typing, mute, pin, unread badges, message requests), voice/video calls, live streaming, admin dashboard, gift history, and all authentication methods.
+App uses Internet Identity for auth via `useInternetIdentity.ts`. The `login` function called `authClient.login()` without passing `derivationOrigin` in the login options. The `useEffect` for initialization included `authClient` in its dependency array, causing it to re-run after setting the auth client and resetting status back to "initializing".
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Starred Messages page**: A dedicated screen accessible from the Chats header (star icon) showing all starred messages across all conversations, grouped by conversation/contact, with sender name, avatar, message text, and timestamp.
-- **Star a message**: Long-press any message in a conversation to reveal a context menu with a "Star" option (in addition to existing reply/edit/react/delete/pin options). Starred messages get a small ⭐ indicator.
-- **Unstar a message**: Long-press a starred message to unstar it, or swipe-to-unstar from the Starred Messages page.
-- **Starred count badge**: Small count shown next to the star icon in the Chats header.
-- **Navigate to original**: Tapping a starred message in the Starred Messages page opens the original conversation at that message.
+- `derivationOrigin` now loaded from config and passed at login time via `authClient.login()` options
+- `initializedRef` guard to prevent the init effect from running more than once
+- Auth client captured in closure so `handleLoginSuccess` always uses the correct, non-stale client
 
 ### Modify
-- Chats header: Add a star icon (⭐) alongside existing gear/inbox/pencil icons to open the Starred Messages page.
-- Message long-press context menu: Add "Star" / "Unstar" option.
+- `useEffect` dependency array changed from `[createOptions, authClient]` to `[]` (runs once on mount only)
+- `handleLoginSuccess` now accepts the client as a parameter instead of reading from stale closure
+- `clear()` resets `initializedRef.current = false` so re-login works after logout
 
 ### Remove
-- Nothing removed.
+- Removed `loginOptions.derivationOrigin` from `createAuthClient` (it belongs at login time, not creation time)
 
 ## Implementation Plan
-1. Add `starredMessages` state (array of {msgId, conversationId, contactName, contactAvatar, text, timestamp, senderId}) stored in localStorage for persistence.
-2. Add `StarredMessagesPage` component: lists all starred messages grouped by contact, with unstar swipe/button, and tap-to-navigate.
-3. Update Chats header to include star icon with count badge that opens StarredMessagesPage.
-4. Update message long-press context menu in ConversationPage to include Star/Unstar option.
-5. Show ⭐ indicator on starred messages in conversation view.
-6. Wire navigation: tapping a starred message navigates to the conversation (existing nav logic).
+1. Fix `useInternetIdentity.ts` with derivationOrigin at login time and single-init ref guard
