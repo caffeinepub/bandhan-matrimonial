@@ -20,6 +20,7 @@ import {
   Reply,
   Send,
   Smile,
+  Star,
   Trash2,
   Video,
   X,
@@ -38,6 +39,7 @@ import {
   useSetTyping,
   useTypingStatus,
 } from "../hooks/useQueries";
+import { useStarredMessages } from "../hooks/useStarredMessages";
 
 type ExtMessage = MessageWithMeta;
 
@@ -169,6 +171,7 @@ export default function ConversationPage({
   const editMessage = useEditMessage();
   const deleteMessage = useDeleteMessage();
   const sendGiftBackend = useSendGiftBackend();
+  const { isStarred, toggleStar } = useStarredMessages();
 
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -415,6 +418,21 @@ export default function ConversationPage({
     setContextMenu(null);
   };
 
+  const handleStar = () => {
+    if (!contextMenu) return;
+    const text = localEdits.get(contextMenu.msgId) ?? contextMenu.msgText;
+    toggleStar({
+      id: contextMenu.msgId,
+      conversationId: profile.userId.toString(),
+      contactName: profile.name,
+      contactAvatar: profile.photoUrl ?? "",
+      text,
+      timestamp: Date.now(),
+      senderId: contextMenu.isMine ? "me" : profile.userId.toString(),
+    });
+    setContextMenu(null);
+  };
+
   const visibleMessages = useMemo(
     () =>
       messages.filter((m) => !deletedIds.has(m.id.toString()) && !m.isDeleted),
@@ -649,6 +667,11 @@ export default function ConversationPage({
                         (edited)
                       </span>
                     )}
+                    {isStarred(msgId) && (
+                      <span className="ml-1 text-[11px]" title="Starred">
+                        ⭐
+                      </span>
+                    )}
                   </div>
                   {reaction && (
                     <div
@@ -826,6 +849,19 @@ export default function ConversationPage({
             >
               <Pin className="w-4 h-4" style={{ color: "#f59e0b" }} />
               {pinnedMessage?.id === contextMenu.msgId ? "Unpin" : "Pin"}
+            </button>
+            <button
+              type="button"
+              onClick={handleStar}
+              data-ocid="conversation.toggle"
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-white/80 hover:bg-white/5 transition-colors"
+            >
+              <Star
+                className="w-4 h-4"
+                style={{ color: "#f59e0b" }}
+                fill={isStarred(contextMenu.msgId) ? "#f59e0b" : "none"}
+              />
+              {isStarred(contextMenu.msgId) ? "Unstar" : "Star"}
             </button>
           </div>
         )}

@@ -35,6 +35,7 @@ import MyProfilePage from "./pages/MyProfilePage";
 import NotificationHistoryPage from "./pages/NotificationHistoryPage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
 import RequestsPage from "./pages/RequestsPage";
+import StarredMessagesPage from "./pages/StarredMessagesPage";
 import VideoCallPage from "./pages/VideoCallPage";
 import ViewProfilePage from "./pages/ViewProfilePage";
 import VoiceCallPage from "./pages/VoiceCallPage";
@@ -56,7 +57,8 @@ export type Page =
   | "liveStream"
   | "dailySuggestions"
   | "messageRequests"
-  | "giftHistory";
+  | "giftHistory"
+  | "starredMessages";
 
 interface IncomingCallInfo {
   fromProfile: Profile;
@@ -452,6 +454,7 @@ export default function App() {
               setCurrentPage("conversation");
             }}
             onMessageRequests={() => setCurrentPage("messageRequests")}
+            onStarredMessages={() => setCurrentPage("starredMessages")}
           />
         )}
         {currentPage === "profile" && (
@@ -464,6 +467,9 @@ export default function App() {
         )}
         {currentPage === "giftHistory" && (
           <GiftHistoryPage onBack={() => setCurrentPage("profile")} />
+        )}
+        {currentPage === "starredMessages" && (
+          <StarredMessagesPage onBack={() => setCurrentPage("chat")} />
         )}
         {currentPage === "admin" && isAdmin && <AdminPage />}
       </main>

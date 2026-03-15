@@ -15,12 +15,14 @@ import {
   Plus,
   Search,
   Settings,
+  Star,
 } from "lucide-react";
 import React from "react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Profile } from "../backend";
 import StoryViewerModal from "../components/StoryViewerModal";
 import { useAddStory, useMutualMatches, useStories } from "../hooks/useQueries";
+import { useStarredMessages } from "../hooks/useStarredMessages";
 import { useStorageUpload } from "../hooks/useStorageUpload";
 
 const STORY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -28,6 +30,7 @@ const STORY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 interface Props {
   onOpenConversation: (p: Profile) => void;
   onMessageRequests?: () => void;
+  onStarredMessages?: () => void;
 }
 
 interface ChatSettings {
@@ -306,6 +309,7 @@ const ChatRowItem = memo(function ChatRowItem({
 export default function ChatPage({
   onOpenConversation,
   onMessageRequests,
+  onStarredMessages,
 }: Props) {
   const { data: matches = [], isLoading } = useMutualMatches();
   const { data: allStories = [], isLoading: storiesLoading } = useStories();
@@ -337,6 +341,8 @@ export default function ChatPage({
       return {};
     },
   );
+  const { starred } = useStarredMessages();
+  const starredCount = starred.length;
   const storyFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -480,6 +486,30 @@ export default function ChatPage({
                 style={{ background: "oklch(0.55 0.22 10)" }}
               >
                 {msgRequestsCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            data-ocid="chat.starred_button"
+            onClick={() => onStarredMessages?.()}
+            className="w-9 h-9 rounded-full flex items-center justify-center relative"
+            style={{ background: "oklch(0.15 0.05 300)" }}
+            title="Starred Messages"
+          >
+            <Star
+              className="w-4 h-4"
+              style={{
+                color: starredCount > 0 ? "#f59e0b" : "rgba(255,255,255,0.5)",
+              }}
+              fill={starredCount > 0 ? "#f59e0b" : "none"}
+            />
+            {starredCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                style={{ background: "oklch(0.7 0.18 60)" }}
+              >
+                {starredCount > 9 ? "9+" : starredCount}
               </span>
             )}
           </button>
