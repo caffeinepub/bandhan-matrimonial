@@ -1,22 +1,21 @@
 # Bandhan Matrimonial
 
 ## Current State
-App uses Internet Identity for auth via `useInternetIdentity.ts`. The `login` function called `authClient.login()` without passing `derivationOrigin` in the login options. The `useEffect` for initialization included `authClient` in its dependency array, causing it to re-run after setting the auth client and resetting status back to "initializing".
+Version 50 with all features from versions 1-50. Authentication via Internet Identity only.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `derivationOrigin` now loaded from config and passed at login time via `authClient.login()` options
-- `initializedRef` guard to prevent the init effect from running more than once
-- Auth client captured in closure so `handleLoginSuccess` always uses the correct, non-stale client
+- Nothing new
 
 ### Modify
-- `useEffect` dependency array changed from `[createOptions, authClient]` to `[]` (runs once on mount only)
-- `handleLoginSuccess` now accepts the client as a parameter instead of reading from stale closure
-- `clear()` resets `initializedRef.current = false` so re-login works after logout
+- `useInternetIdentity.ts`: Fix auth re-initialization loop by using a `useRef` guard (`initDone`) so the `useEffect` runs exactly once on mount, with NO `authClient` in the dependency array. `authClient` is stored in a `useRef` (not useState) so it never triggers re-renders or re-effects. `clear()` calls `authClient.logout()` but does NOT set authClient to undefined. `login()` fetches `derivationOrigin` from config at call time and passes it to `authClient.login()`. Corrupted localStorage tokens are auto-cleared.
+- `App.tsx`: Remove any `useEffect` that interferes with logout navigation; use a simple effect that sets page to "browse" when logged out.
 
 ### Remove
-- Removed `loginOptions.derivationOrigin` from `createAuthClient` (it belongs at login time, not creation time)
+- Nothing
 
 ## Implementation Plan
-1. Fix `useInternetIdentity.ts` with derivationOrigin at login time and single-init ref guard
+1. Rewrite `useInternetIdentity.ts` with ref-based client (no dependency array issues)
+2. Clean up `App.tsx` logout/redirect logic
+3. Validate and deploy

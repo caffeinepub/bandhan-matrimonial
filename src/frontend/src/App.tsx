@@ -25,6 +25,7 @@ import CallHistoryPage from "./pages/CallHistoryPage";
 import ChatPage from "./pages/ChatPage";
 import ConversationPage from "./pages/ConversationPage";
 import DailySuggestionsPage from "./pages/DailySuggestionsPage";
+import FavoritesPage from "./pages/FavoritesPage";
 import GiftHistoryPage from "./pages/GiftHistoryPage";
 import LiveStreamListPage from "./pages/LiveStreamListPage";
 import LiveStreamPage from "./pages/LiveStreamPage";
@@ -58,24 +59,13 @@ export type Page =
   | "dailySuggestions"
   | "messageRequests"
   | "giftHistory"
+  | "favorites"
   | "starredMessages";
 
 interface IncomingCallInfo {
   fromProfile: Profile;
   callType: CallType;
   offerData: string;
-}
-
-function safeJsonParse<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    try {
-      localStorage.removeItem("bandhan_session");
-    } catch {}
-    return fallback;
-  }
 }
 
 function getMsgRequestCount(): number {
@@ -94,7 +84,14 @@ function getMsgRequestCount(): number {
 }
 
 export default function App() {
-  const { identity, isInitializing } = useInternetIdentity();
+  const { identity, isInitializing, clear: iiClear } = useInternetIdentity();
+  const isLoggedIn = !!identity;
+
+  const handleLogout = useCallback(() => {
+    iiClear();
+    setCurrentPage("browse");
+  }, [iiClear]);
+
   const [currentPage, setCurrentPage] = useState<Page>("browse");
   const [selectedMatchForChat, setSelectedMatchForChat] =
     useState<Profile | null>(null);
@@ -111,40 +108,27 @@ export default function App() {
   const [activeLiveMode, setActiveLiveMode] = useState<"video" | "audio">(
     "video",
   );
-  const [localSession] = useState(() =>
-    safeJsonParse(
-      localStorage.getItem("bandhan_session"),
-      null as Record<string, unknown> | null,
-    ),
-  );
   const [msgReqCount, setMsgReqCount] = useState(getMsgRequestCount);
   const [pushNotif, setPushNotif] = useState<PushNotif | null>(null);
 
-  const { isFetching: actorFetching } = useAppActor();
-  const {
-    data: profile,
-    isLoading: profileLoading,
-    isFetching: profileFetching,
-  } = useCallerProfile();
+  useAppActor();
+  const { data: profile, isLoading: profileLoading } = useCallerProfile();
   const { data: isAdmin } = useIsAdmin();
   const { data: mutualMatches = [] } = useMutualMatches();
   const storeSignal = useStoreCallSignal();
 
-  const isLoggedIn = !!identity || !!localSession;
   const needsProfile =
-    isLoggedIn &&
-    !profileLoading &&
-    !profileFetching &&
-    !actorFetching &&
-    profile === null &&
-    !localSession;
+    isLoggedIn && !isInitializing && !profileLoading && profile === null;
+
   const isInCall = currentPage === "voiceCall" || currentPage === "videoCall";
 
+  // Navigate to login page when logged out
   useEffect(() => {
-    if (!isLoggedIn) setCurrentPage("browse");
-  }, [isLoggedIn]);
+    if (!isLoggedIn && !isInitializing) {
+      setCurrentPage("browse");
+    }
+  }, [isLoggedIn, isInitializing]);
 
-  // Simulate push notification for demo (fires once 8s after mounting)
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally fire once on login
   useEffect(() => {
     if (!isLoggedIn || mutualMatches.length === 0) return;
@@ -155,7 +139,6 @@ export default function App() {
         "I loved your profile!",
         "Are you free to chat? 💬",
       ];
-      // Suppress notification if this conversation is muted
       let isMutedConv = false;
       try {
         const mutedRaw = localStorage.getItem("muted_conversations");
@@ -214,7 +197,7 @@ export default function App() {
     setIncomingCall(null);
   };
 
-  if (isInitializing || profileLoading || actorFetching) {
+  if (isInitializing) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -445,6 +428,7 @@ export default function App() {
               setSelectedProfile(p);
               setCurrentPage("viewProfile");
             }}
+            onFavorites={() => setCurrentPage("favorites")}
           />
         )}
         {currentPage === "chat" && (
@@ -463,6 +447,7 @@ export default function App() {
             onGoLive={() => setCurrentPage("liveStreamList")}
             onSuggestions={() => setCurrentPage("dailySuggestions")}
             onGiftHistory={() => setCurrentPage("giftHistory")}
+            onLogout={handleLogout}
           />
         )}
         {currentPage === "giftHistory" && (
@@ -470,6 +455,19 @@ export default function App() {
         )}
         {currentPage === "starredMessages" && (
           <StarredMessagesPage onBack={() => setCurrentPage("chat")} />
+        )}
+        {currentPage === "favorites" && (
+          <FavoritesPage
+            onBack={() => setCurrentPage("matches")}
+            onViewProfile={(p) => {
+              setSelectedProfile(p);
+              setCurrentPage("viewProfile");
+            }}
+            onOpenChat={(p) => {
+              setSelectedMatchForChat(p);
+              setCurrentPage("conversation");
+            }}
+          />
         )}
         {currentPage === "admin" && isAdmin && <AdminPage />}
       </main>
