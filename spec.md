@@ -1,7 +1,7 @@
 # Bandhan Matrimonial
 
 ## Current State
-Version 50 with all features from versions 1-50. Authentication via Internet Identity only.
+App has persistent authentication issues: profile creation fails, data doesn't load, profile save doesn't work. Root cause is in `useInternetIdentity.ts`.
 
 ## Requested Changes (Diff)
 
@@ -9,13 +9,14 @@ Version 50 with all features from versions 1-50. Authentication via Internet Ide
 - Nothing new
 
 ### Modify
-- `useInternetIdentity.ts`: Fix auth re-initialization loop by using a `useRef` guard (`initDone`) so the `useEffect` runs exactly once on mount, with NO `authClient` in the dependency array. `authClient` is stored in a `useRef` (not useState) so it never triggers re-renders or re-effects. `clear()` calls `authClient.logout()` but does NOT set authClient to undefined. `login()` fetches `derivationOrigin` from config at call time and passes it to `authClient.login()`. Corrupted localStorage tokens are auto-cleared.
-- `App.tsx`: Remove any `useEffect` that interferes with logout navigation; use a simple effect that sets page to "browse" when logged out.
+- `useInternetIdentity.ts`: Fix the auth hook so it never loops
 
 ### Remove
 - Nothing
 
 ## Implementation Plan
-1. Rewrite `useInternetIdentity.ts` with ref-based client (no dependency array issues)
-2. Clean up `App.tsx` logout/redirect logic
-3. Validate and deploy
+1. Move `authClient` from `useState` to `useRef` + add `initDoneRef` guard so `useEffect` truly runs only once
+2. Use empty `[]` dependency array on the init `useEffect`
+3. Pass `derivationOrigin` in the actual `login()` call (loaded from config at login time)
+4. In `clear()`, do NOT destroy the authClient (keep ref alive) — only clear identity/status
+5. Auto-clear corrupted localStorage delegation tokens on parse error

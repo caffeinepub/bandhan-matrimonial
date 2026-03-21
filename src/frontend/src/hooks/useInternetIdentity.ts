@@ -84,29 +84,45 @@ export function InternetIdentityProvider({
   children: ReactNode;
   createOptions?: AuthClientCreateOptions;
 }>) {
+  // Use a ref for the authClient so changes to it never trigger re-renders or re-runs of useEffect
+  const authClientRef = useRef<AuthClient | undefined>(undefined);
+  const initDoneRef = useRef(false);
+
   const [identity, setIdentity] = useState<Identity | undefined>(undefined);
   const [loginStatus, setStatus] = useState<Status>("initializing");
   const [loginError, setError] = useState<Error | undefined>(undefined);
-
-  // authClient stored in ref — never causes re-renders or re-effects
-  const authClientRef = useRef<AuthClient | undefined>(undefined);
-  const initDone = useRef(false);
-  // capture createOptions in a ref so we can use it in the effect without deps
-  const createOptionsRef = useRef(createOptions);
 
   const setErrorMessage = useCallback((message: string) => {
     setStatus("loginError");
     setError(new Error(message));
   }, []);
 
-  const login = useCallback(async () => {
-    const authClient = authClientRef.current;
-    if (!authClient) {
+  const handleLoginSuccess = useCallback(() => {
+    const client = authClientRef.current;
+    if (!client) {
+      setErrorMessage("Identity not found after successful login");
+      return;
+    }
+    const latestIdentity = client.getIdentity();
+    setIdentity(latestIdentity);
+    setStatus("success");
+  }, [setErrorMessage]);
+
+  const handleLoginError = useCallback(
+    (maybeError?: string) => {
+      setErrorMessage(maybeError ?? "Login failed");
+    },
+    [setErrorMessage],
+  );
+
+  const login = useCallback(() => {
+    const client = authClientRef.current;
+    if (!client) {
       setErrorMessage("AuthClient is not initialized yet.");
       return;
     }
 
-    const currentIdentity = authClient.getIdentity();
+    const currentIdentity = client.getIdentity();
     if (
       !currentIdentity.getPrincipal().isAnonymous() &&
       currentIdentity instanceof DelegationIdentity &&
@@ -116,50 +132,32 @@ export function InternetIdentityProvider({
       return;
     }
 
-    let derivationOrigin: string | undefined;
-    try {
-      const cfg = await loadConfig();
-      derivationOrigin = cfg.ii_derivation_origin;
-    } catch {
-      // proceed without derivationOrigin
-    }
-
-    const options: AuthClientLoginOptions = {
-      identityProvider: DEFAULT_IDENTITY_PROVIDER,
-      ...(derivationOrigin ? { derivationOrigin } : {}),
-      onSuccess: () => {
-        const latestIdentity = authClientRef.current?.getIdentity();
-        if (!latestIdentity) {
-          setErrorMessage("Identity not found after successful login");
-          return;
-        }
-        setIdentity(latestIdentity);
-        setStatus("success");
-      },
-      onError: (maybeError?: string) => {
-        setErrorMessage(maybeError ?? "Login failed");
-      },
-      maxTimeToLive: ONE_HOUR_IN_NANOSECONDS * BigInt(24 * 30),
-    };
-
-    setStatus("logging-in");
-    void authClient.login(options);
-  }, [setErrorMessage]);
+    // Load derivationOrigin at login time (what II actually checks)
+    void loadConfig().then((config) => {
+      const options: AuthClientLoginOptions = {
+        identityProvider: DEFAULT_IDENTITY_PROVIDER,
+        derivationOrigin: config.ii_derivation_origin,
+        onSuccess: handleLoginSuccess,
+        onError: handleLoginError,
+        maxTimeToLive: ONE_HOUR_IN_NANOSECONDS * BigInt(24 * 30), // 30 days
+      };
+      setStatus("logging-in");
+      void client.login(options);
+    });
+  }, [handleLoginError, handleLoginSuccess, setErrorMessage]);
 
   const clear = useCallback(() => {
-    const authClient = authClientRef.current;
-    if (!authClient) return;
+    const client = authClientRef.current;
+    if (!client) return;
 
-    void authClient
+    void client
       .logout()
       .then(() => {
+        // Do NOT set authClientRef.current = undefined — keep the client alive
+        // so the init useEffect never re-runs
         setIdentity(undefined);
         setStatus("idle");
         setError(undefined);
-        try {
-          localStorage.removeItem("bandhan_session");
-          localStorage.removeItem("bandhan_users");
-        } catch {}
       })
       .catch((unknownError: unknown) => {
         setStatus("loginError");
@@ -171,52 +169,51 @@ export function InternetIdentityProvider({
       });
   }, []);
 
-  // Init ONCE on mount — empty dependency array, no authClient state involved
+  // This effect runs EXACTLY ONCE on mount. Never again.
+  // authClientRef is a ref, not state, so it cannot trigger re-runs.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount
   useEffect(() => {
-    if (initDone.current) return;
-    initDone.current = true;
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
 
     void (async () => {
       try {
         setStatus("initializing");
-        const client = await createAuthClient(createOptionsRef.current);
+        const client = await createAuthClient(createOptions);
         authClientRef.current = client;
 
+        // Clear corrupted tokens if any
         let isAuthenticated = false;
         try {
           isAuthenticated = await client.isAuthenticated();
         } catch {
-          // Corrupted delegation token — clear and continue as logged out
-          try {
-            for (const k of Object.keys(localStorage)) {
-              if (
-                k.startsWith("ic-") ||
-                k.startsWith("delegation") ||
-                k.startsWith("identity")
-              ) {
-                localStorage.removeItem(k);
-              }
-            }
-          } catch {}
-          isAuthenticated = false;
+          // Corrupted delegation — clear II storage keys
+          const keysToRemove = Object.keys(localStorage).filter(
+            (k) =>
+              k.startsWith("ic-") ||
+              k.includes("delegation") ||
+              k.includes("identity"),
+          );
+          for (const k of keysToRemove) localStorage.removeItem(k);
         }
 
         if (isAuthenticated) {
           const loadedIdentity = client.getIdentity();
           setIdentity(loadedIdentity);
+          setStatus("success");
+        } else {
+          setStatus("idle");
         }
       } catch (unknownError) {
-        setStatus("loginError");
+        setStatus("idle"); // Don't block the app
         setError(
           unknownError instanceof Error
             ? unknownError
             : new Error("Initialization failed"),
         );
-      } finally {
-        setStatus("idle");
       }
     })();
-  }, []);
+  }, []); // Empty deps — run once only
 
   const value = useMemo<ProviderValue>(
     () => ({
