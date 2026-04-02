@@ -89,7 +89,6 @@ export default function App() {
 
   const handleLogout = useCallback(() => {
     iiClear();
-    setCurrentPage("browse");
   }, [iiClear]);
 
   const [currentPage, setCurrentPage] = useState<Page>("browse");
@@ -111,14 +110,18 @@ export default function App() {
   const [msgReqCount, setMsgReqCount] = useState(getMsgRequestCount);
   const [pushNotif, setPushNotif] = useState<PushNotif | null>(null);
 
-  useAppActor();
+  const { isFetching: actorFetching } = useAppActor();
   const { data: profile, isLoading: profileLoading } = useCallerProfile();
   const { data: isAdmin } = useIsAdmin();
   const { data: mutualMatches = [] } = useMutualMatches();
   const storeSignal = useStoreCallSignal();
 
   const needsProfile =
-    isLoggedIn && !isInitializing && !profileLoading && profile === null;
+    isLoggedIn &&
+    !isInitializing &&
+    !actorFetching &&
+    !profileLoading &&
+    profile === null;
 
   const isInCall = currentPage === "voiceCall" || currentPage === "videoCall";
 
